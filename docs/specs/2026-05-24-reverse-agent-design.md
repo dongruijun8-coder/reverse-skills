@@ -16,7 +16,7 @@
 
 ```
 用户打开新 Claude Code 会话 →
-  工作目录: reverse-agent/ (含 CLAUDE.md + .claude/rules/)
+  工作目录: reverse-skills/ (含 CLAUDE.md + .claude/rules/)
   输入: "逆向分析这个 APK"
   →
   Claude Code 读取 CLAUDE.md → 加载 rules →
@@ -66,7 +66,7 @@
 ### 2.2 目录结构
 
 ```
-reverse-agent/
+reverse-skills/
 ├── CLAUDE.md                    Agent 行为准则
 ├── .claude/rules/               规则文件
 │   ├── anti-reverse-rules.md    反逆向策略硬规则
@@ -494,6 +494,6 @@ Plugin 内置 `CREDENTIAL_SOURCES` 元数据，过期时自动尝试从设备重
 |------|------|------|
 | `reverse-toolkit/` | Agent 调用其管线 | toolkit_analyze / toolkit_scaffold 封装现有代码 |
 | `engine/` | Agent 产物的消费者 | api_spec.json + plugin.py 供 Engine 运行时使用 |
-| `reverse-agent/` | **本项目** | Agent 的 Skills + KB + Tools — 三者连接点 |
+| `reverse-skills/` | **本项目** | Agent 的 Skills + KB + Tools — 三者连接点 |
 
-`reverse-agent/` 不修改 `reverse-toolkit/` 或 `engine/` 的代码，仅读取和调用。
+`reverse-skills/` 不修改 `reverse-toolkit/` 或 `engine/` 的代码，仅读取和调用。

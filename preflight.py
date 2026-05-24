@@ -73,7 +73,7 @@ def main():
         print("[OK] All required dependencies satisfied!")
         print()
         print("To start:")
-        print("  cd reverse-agent")
+        print("  cd reverse-skills")
         print("  claude")
         print('  Then type: "Reverse engineer this APK: /path/to/app.apk"')
 

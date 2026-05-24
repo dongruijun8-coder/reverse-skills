@@ -2,8 +2,8 @@
 # Reverse Engineering Agent — 一键安装脚本 (macOS/Linux)
 set -e
 
-REPO_URL="https://github.com/dongruijun8-coder/reverse-agent.git"
-INSTALL_DIR="${HOME}/.claude/reverse-agent"
+REPO_URL="https://github.com/dongruijun8-coder/reverse-skills.git"
+INSTALL_DIR="${HOME}/.claude/reverse-skills"
 
 echo "========================================"
 echo "  Reverse Engineering Agent 安装脚本"

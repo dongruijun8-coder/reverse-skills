@@ -8,16 +8,16 @@
 
 **Tech Stack:** Claude Code (agent host), Python 3.12+ (MCP tools), mitmproxy, jadx, Frida, Jinja2 (scaffold)
 
-**Spec:** [2026-05-24-reverse-agent-design.md](../specs/2026-05-24-reverse-agent-design.md)
+**Spec:** [2026-05-24-reverse-skills-design.md](../specs/2026-05-24-reverse-skills-design.md)
 
-**Directory:** `e:\桌面\自动化逆向工作流\reverse-agent/`
+**Directory:** `e:\桌面\自动化逆向工作流\reverse-skills/`
 
 ---
 
 ## File Structure Map
 
 ```
-reverse-agent/
+reverse-skills/
 ├── CLAUDE.md                          [Phase 1]
 ├── .claude/rules/
 │   ├── anti-reverse-rules.md          [Phase 1]
@@ -77,7 +77,7 @@ reverse-agent/
 ### Task 1.1: Create CLAUDE.md
 
 **Files:**
-- Create: `reverse-agent/CLAUDE.md`
+- Create: `reverse-skills/CLAUDE.md`
 
 - [ ] **Step 1: Write CLAUDE.md**
 
@@ -137,7 +137,7 @@ reverse-agent/
 - [ ] **Step 2: Verify file exists and is readable**
 
 ```bash
-wc -l reverse-agent/CLAUDE.md
+wc -l reverse-skills/CLAUDE.md
 ```
 
 ---
@@ -145,10 +145,10 @@ wc -l reverse-agent/CLAUDE.md
 ### Task 1.2: Create .claude/rules/ (4 rule files)
 
 **Files:**
-- Create: `reverse-agent/.claude/rules/anti-reverse-rules.md`
-- Create: `reverse-agent/.claude/rules/safety-rules.md`
-- Create: `reverse-agent/.claude/rules/quality-rules.md`
-- Create: `reverse-agent/.claude/rules/parallel-rules.md`
+- Create: `reverse-skills/.claude/rules/anti-reverse-rules.md`
+- Create: `reverse-skills/.claude/rules/safety-rules.md`
+- Create: `reverse-skills/.claude/rules/quality-rules.md`
+- Create: `reverse-skills/.claude/rules/parallel-rules.md`
 
 - [ ] **Step 1: Write anti-reverse-rules.md**
 
@@ -285,7 +285,7 @@ wc -l reverse-agent/CLAUDE.md
 - [ ] **Step 5: Verify all 4 rule files exist**
 
 ```bash
-ls -la reverse-agent/.claude/rules/
+ls -la reverse-skills/.claude/rules/
 ```
 
 ---
@@ -293,10 +293,10 @@ ls -la reverse-agent/.claude/rules/
 ### Task 1.3: Create KB pattern files (Phase 1 subset: 4 files)
 
 **Files:**
-- Create: `reverse-agent/kb/patterns/packer_patterns.md`
-- Create: `reverse-agent/kb/patterns/anti_patterns.md`
-- Create: `reverse-agent/kb/patterns/exit_conditions.md`
-- Create: `reverse-agent/kb/patterns/device_fingerprint.md`
+- Create: `reverse-skills/kb/patterns/packer_patterns.md`
+- Create: `reverse-skills/kb/patterns/anti_patterns.md`
+- Create: `reverse-skills/kb/patterns/exit_conditions.md`
+- Create: `reverse-skills/kb/patterns/device_fingerprint.md`
 
 - [ ] **Step 1: Write packer_patterns.md**
 
@@ -477,7 +477,7 @@ ls -la reverse-agent/.claude/rules/
 - [ ] **Step 5: Verify all 4 KB files exist**
 
 ```bash
-ls -la reverse-agent/kb/patterns/
+ls -la reverse-skills/kb/patterns/
 ```
 
 ---
@@ -485,8 +485,8 @@ ls -la reverse-agent/kb/patterns/
 ### Task 1.4: Create KB metadata files
 
 **Files:**
-- Create: `reverse-agent/kb/confidence_rules.json`
-- Create: `reverse-agent/kb/case_library/index.json`
+- Create: `reverse-skills/kb/confidence_rules.json`
+- Create: `reverse-skills/kb/case_library/index.json`
 
 - [ ] **Step 1: Write confidence_rules.json**
 
@@ -629,8 +629,8 @@ ls -la reverse-agent/kb/patterns/
 - [ ] **Step 3: Verify both metadata files**
 
 ```bash
-python -c "import json; json.load(open('reverse-agent/kb/confidence_rules.json')); print('OK')"
-python -c "import json; json.load(open('reverse-agent/kb/case_library/index.json')); print('OK')"
+python -c "import json; json.load(open('reverse-skills/kb/confidence_rules.json')); print('OK')"
+python -c "import json; json.load(open('reverse-skills/kb/case_library/index.json')); print('OK')"
 ```
 
 ---
@@ -638,7 +638,7 @@ python -c "import json; json.load(open('reverse-agent/kb/case_library/index.json
 ### Task 1.5: Create Skill — reverse-orchestrator
 
 **Files:**
-- Create: `reverse-agent/skills/reverse-orchestrator.md`
+- Create: `reverse-skills/skills/reverse-orchestrator.md`
 
 - [ ] **Step 1: Write reverse-orchestrator.md**
 
@@ -812,7 +812,7 @@ Write to `projects/{app}/audit.jsonl` using these event types:
 ### Task 1.6: Create Skill — reverse-apk-analyzer
 
 **Files:**
-- Create: `reverse-agent/skills/reverse-apk-analyzer.md`
+- Create: `reverse-skills/skills/reverse-apk-analyzer.md`
 
 - [ ] **Step 1: Write reverse-apk-analyzer.md**
 
@@ -903,8 +903,8 @@ If match found: output the matched case's `workflow.json` strategy as a referenc
 ### Task 1.7: Write MCP tool — apk_tools.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/__init__.py`
-- Create: `reverse-agent/mcp_tools/apk_tools.py`
+- Create: `reverse-skills/mcp_tools/__init__.py`
+- Create: `reverse-skills/mcp_tools/apk_tools.py`
 
 - [ ] **Step 1: Write __init__.py**
 
@@ -1141,7 +1141,7 @@ python -c "from reverse_agent.mcp_tools.apk_tools import apk_unpack, apk_detect_
 ### Task 1.8: Write MCP tool — adb_tools.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/adb_tools.py`
+- Create: `reverse-skills/mcp_tools/adb_tools.py`
 
 - [ ] **Step 1: Write adb_tools.py**
 
@@ -1290,7 +1290,7 @@ def adb_install_cert(cert_path: str, cert_name: str = "mitmproxy") -> dict:
 ### Task 1.9: Write Phase 0 tests
 
 **Files:**
-- Create: `reverse-agent/tests/agent_tests/test_phase0.py`
+- Create: `reverse-skills/tests/agent_tests/test_phase0.py`
 
 - [ ] **Step 1: Write test for apk_detect_packer with 360加固**
 
@@ -1382,7 +1382,7 @@ def test_apk_string_search_finds_urls():
 - [ ] **Step 2: Run tests**
 
 ```bash
-cd reverse-agent && python -m pytest tests/agent_tests/test_phase0.py -v
+cd reverse-skills && python -m pytest tests/agent_tests/test_phase0.py -v
 ```
 
 Expected: 4 tests pass
@@ -1390,7 +1390,7 @@ Expected: 4 tests pass
 - [ ] **Step 3: Commit Phase 1**
 
 ```bash
-git add reverse-agent/CLAUDE.md reverse-agent/.claude/ reverse-agent/kb/ reverse-agent/skills/ reverse-agent/mcp_tools/ reverse-agent/tests/
+git add reverse-skills/CLAUDE.md reverse-skills/.claude/ reverse-skills/kb/ reverse-skills/skills/ reverse-skills/mcp_tools/ reverse-skills/tests/
 git commit -m "feat: Phase 1 foundation — CLAUDE.md, rules, KB, orchestrator/apk-analyzer skills, APK/ADB tools, tests"
 ```
 
@@ -1401,7 +1401,7 @@ git commit -m "feat: Phase 1 foundation — CLAUDE.md, rules, KB, orchestrator/a
 ### Task 2.1: Create KB pattern — ssl_bypass_strategies.md
 
 **Files:**
-- Create: `reverse-agent/kb/patterns/ssl_bypass_strategies.md`
+- Create: `reverse-skills/kb/patterns/ssl_bypass_strategies.md`
 
 ```markdown
 # SSL Bypass Decision Tree
@@ -1447,7 +1447,7 @@ git commit -m "feat: Phase 1 foundation — CLAUDE.md, rules, KB, orchestrator/a
 ### Task 2.2: Create MCP tool — proxy_tools.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/proxy_tools.py`
+- Create: `reverse-skills/mcp_tools/proxy_tools.py`
 
 ```python
 """Proxy tools — start/stop mitmproxy, list/get flows."""
@@ -1521,7 +1521,7 @@ def proxy_get_flow(flow_id: str) -> dict:
 ### Task 2.3: Create MCP tool — hook_tools.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/hook_tools.py`
+- Create: `reverse-skills/mcp_tools/hook_tools.py`
 
 ```python
 """Hook tools — generate and run Frida/LSPosed hook scripts."""
@@ -1530,7 +1530,7 @@ from pathlib import Path
 
 
 FRIDA_HOOK_TEMPLATE = """
-// Auto-generated by reverse-agent hook_gen_frida
+// Auto-generated by reverse-skills hook_gen_frida
 // Target classes: {target_classes}
 
 Java.perform(function() {{
@@ -1655,7 +1655,7 @@ def hook_run(method: str, script_path: str, package: str, timeout: int = 60) -> 
 ### Task 2.4: Write Phase 2 tests
 
 **Files:**
-- Create: `reverse-agent/tests/agent_tests/test_phase2.py`
+- Create: `reverse-skills/tests/agent_tests/test_phase2.py`
 
 ```python
 """Phase 2 tests — hook generation."""
@@ -1682,7 +1682,7 @@ def test_hook_gen_frida_custom_classes():
 - [ ] **Step: Run tests**
 
 ```bash
-cd reverse-agent && python -m pytest tests/agent_tests/test_phase2.py -v
+cd reverse-skills && python -m pytest tests/agent_tests/test_phase2.py -v
 ```
 
 ---
@@ -1692,17 +1692,17 @@ cd reverse-agent && python -m pytest tests/agent_tests/test_phase2.py -v
 ### Task 3.1: Create KB patterns — sign, crypto, auth_flow
 
 **Files:**
-- Create: `reverse-agent/kb/patterns/sign_patterns.md`
-- Create: `reverse-agent/kb/patterns/crypto_patterns.md`
-- Create: `reverse-agent/kb/patterns/auth_flow_patterns.md`
+- Create: `reverse-skills/kb/patterns/sign_patterns.md`
+- Create: `reverse-skills/kb/patterns/crypto_patterns.md`
+- Create: `reverse-skills/kb/patterns/auth_flow_patterns.md`
 
 Content for these files follows the exact specifications shown in the design doc §8.1 tables (sign patterns 5 modes, crypto patterns 5 modes, auth flow patterns 4 modes). See spec for full content.
 
 ### Task 3.2: Create Skills — reverse-js-analyzer, reverse-crypto-detector
 
 **Files:**
-- Create: `reverse-agent/skills/reverse-js-analyzer.md`
-- Create: `reverse-agent/skills/reverse-crypto-detector.md`
+- Create: `reverse-skills/skills/reverse-js-analyzer.md`
+- Create: `reverse-skills/skills/reverse-crypto-detector.md`
 
 These skills are Claude Code custom slash commands that guide the agent through:
 - JS analysis: search for sign/crypto patterns → compute confidence → generate Python code → verify
@@ -1713,8 +1713,8 @@ Full skill content follows the Phase 3 workflow described in the spec §3.
 ### Task 3.3: Create MCP tools — crypto_tools.py + data_tools.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/crypto_tools.py`
-- Create: `reverse-agent/mcp_tools/data_tools.py`
+- Create: `reverse-skills/mcp_tools/crypto_tools.py`
+- Create: `reverse-skills/mcp_tools/data_tools.py`
 
 ```python
 # crypto_tools.py — AES/RC4/RSA/hash operations and sign verification
@@ -1726,7 +1726,7 @@ Full implementations cover: crypto_aes (ECB/CBC/PKCS7), crypto_hash (MD5/SHA), c
 ### Task 3.4: Write Phase 3 tests
 
 **Files:**
-- Create: `reverse-agent/tests/agent_tests/test_phase3.py`
+- Create: `reverse-skills/tests/agent_tests/test_phase3.py`
 
 Tests cover: crypto_aes encrypt/decrypt roundtrip, crypto_hash MD5 uppercase match, crypto_sign_verify pass/fail cases, db_explore URL extraction.
 
@@ -1737,12 +1737,12 @@ Tests cover: crypto_aes encrypt/decrypt roundtrip, crypto_hash MD5 uppercase mat
 ### Task 4.1: Create Skill — reverse-auth-flow-composer
 
 **Files:**
-- Create: `reverse-agent/skills/reverse-auth-flow-composer.md`
+- Create: `reverse-skills/skills/reverse-auth-flow-composer.md`
 
 ### Task 4.2: Create MCP tool — toolkit_bridge.py
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/toolkit_bridge.py`
+- Create: `reverse-skills/mcp_tools/toolkit_bridge.py`
 
 Wraps `reverse-toolkit` analyzer and generator:
 - `toolkit_analyze(mitm_file, app_name)` → calls analyzer pipeline
@@ -1757,7 +1757,7 @@ Wraps `reverse-toolkit` analyzer and generator:
 ### Task 4.4: Write Phase 4-5 tests
 
 **Files:**
-- Create: `reverse-agent/tests/agent_tests/test_phase4.py`
+- Create: `reverse-skills/tests/agent_tests/test_phase4.py`
 
 Tests cover: smoke test pipeline (import → sign verify → auth → fetch_rooms).
 
@@ -1768,20 +1768,20 @@ Tests cover: smoke test pipeline (import → sign verify → auth → fetch_room
 ### Task 5.1: Create test fixtures
 
 **Files:**
-- Create: `reverse-agent/tests/fixtures/fake_apk_360.apk` (minimal APK with libjiagu.so marker)
-- Create: `reverse-agent/tests/fixtures/sample_app.js` (JS with MD5 sign pattern)
-- Create: `reverse-agent/tests/fixtures/encrypted_response.bin` (AES-ECB encrypted sample)
+- Create: `reverse-skills/tests/fixtures/fake_apk_360.apk` (minimal APK with libjiagu.so marker)
+- Create: `reverse-skills/tests/fixtures/sample_app.js` (JS with MD5 sign pattern)
+- Create: `reverse-skills/tests/fixtures/encrypted_response.bin` (AES-ECB encrypted sample)
 
 ### Task 5.2: Create test manifest + E2E test
 
 **Files:**
-- Create: `reverse-agent/tests/agent_tests/test_manifest.json`
-- Create: `reverse-agent/tests/agent_tests/test_e2e.py`
+- Create: `reverse-skills/tests/agent_tests/test_manifest.json`
+- Create: `reverse-skills/tests/agent_tests/test_e2e.py`
 
 ### Task 5.3: Create MCP server entry point
 
 **Files:**
-- Create: `reverse-agent/mcp_tools/server.py`
+- Create: `reverse-skills/mcp_tools/server.py`
 
 Registers all tools as an MCP server that Claude Code can connect to.
 

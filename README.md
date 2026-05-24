@@ -14,15 +14,15 @@
 
 ```bash
 # 方式 1: git clone (推荐)
-git clone https://github.com/dongruijun8-coder/reverse-agent.git
-cd reverse-agent
+git clone https://github.com/dongruijun8-coder/reverse-skills.git
+cd reverse-skills
 claude         # 在此目录启动 Claude Code
 
 # 方式 2: 一键脚本 (Windows PowerShell)
-irm https://raw.githubusercontent.com/YOUR_USER/reverse-agent/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/YOUR_USER/reverse-skills/main/install.ps1 | iex
 
 # 方式 3: 一键脚本 (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/YOUR_USER/reverse-agent/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/YOUR_USER/reverse-skills/main/install.sh | bash
 ```
 
 ## 快速开始
@@ -47,7 +47,7 @@ Agent 自动执行:
 ## 文件结构
 
 ```
-reverse-agent/
+reverse-skills/
 ├── CLAUDE.md                 Agent 行为准则（Claude Code 自动加载）
 ├── .claude/rules/            规则文件（自动生效）
 ├── skills/                   5 个逆向 Skill

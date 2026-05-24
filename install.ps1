@@ -2,8 +2,8 @@
 # 使用方法: irm https://.../install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
-$RepoUrl = "https://github.com/dongruijun8-coder/reverse-agent.git"
-$InstallDir = "$env:USERPROFILE\.claude\reverse-agent"
+$RepoUrl = "https://github.com/dongruijun8-coder/reverse-skills.git"
+$InstallDir = "$env:USERPROFILE\.claude\reverse-skills"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Reverse Engineering Agent 安装脚本" -ForegroundColor Cyan
