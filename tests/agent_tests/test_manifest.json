@@ -1,0 +1,49 @@
+{
+  "test_apps": [
+    {
+      "name": "mengyin",
+      "description": "360加固 + H5签名 + Ticket认证 + AES加密",
+      "expected": {
+        "packer": "360加固",
+        "decompile_skipped": true,
+        "strategy": "h5_static_analysis",
+        "sign_pattern": "MD5_key_suffix",
+        "sign_key_initial": "",
+        "crypto_algo": "AES-128-ECB",
+        "auth_type": "ticket_session",
+        "should_skip": ["frida_attach", "frida_gadget", "jadx_decompile"],
+        "smoke_test": {"authenticate": true, "fetch_rooms_min": 100}
+      }
+    },
+    {
+      "name": "popo",
+      "description": "未加固 + 无签名 + Token认证 + 无加密",
+      "expected": {
+        "packer": "none",
+        "decompile_skipped": false,
+        "strategy": "system_proxy",
+        "sign_pattern": "none",
+        "auth_type": "token_chain",
+        "should_skip": [],
+        "smoke_test": {"authenticate": true, "fetch_rooms_min": 50}
+      }
+    }
+  ],
+  "test_scenarios": {
+    "packer_detection": {
+      "fixture": "tests/fixtures/fake_apk_360.zip",
+      "expected_packer": "360加固",
+      "expected_skip": ["frida_attach", "frida_gadget"]
+    },
+    "sign_detection": {
+      "fixture": "tests/fixtures/sample_app.js",
+      "expected_pattern": "MD5_key_suffix",
+      "min_confidence": 70
+    },
+    "crypto_detection": {
+      "fixture": "tests/fixtures/encrypted_response.bin",
+      "expected_algo": "AES-128-ECB",
+      "expected_key": "vt5i9pn9dwxj8na8"
+    }
+  }
+}
