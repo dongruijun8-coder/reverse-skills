@@ -4,7 +4,7 @@ set -e
 
 REPO_URL="https://github.com/dongruijun8-coder/reverse-skills.git"
 INSTALL_DIR="${HOME}/.claude/reverse-skills"
-SKILLS_DIR="${HOME}/.claude/skills/reverse-skills"
+USER_SKILLS="${HOME}/.claude/skills"
 
 echo "========================================"
 echo "  Reverse Skills 安装"
@@ -28,10 +28,14 @@ echo "[PIP] 安装依赖..."
 cd "$INSTALL_DIR"
 pip3 install mitmproxy click jinja2 pycryptodome -q
 
-# 3. 注册 Skills 到全局
+# 3. 每个 Skill 注册为独立目录 + SKILL.md
 echo "[REGISTER] 注册 Skills..."
-mkdir -p "$SKILLS_DIR"
-cp "$INSTALL_DIR/.claude/skills/"*.md "$SKILLS_DIR/"
+for md in "$INSTALL_DIR/.claude/skills/"*.md; do
+    name=$(basename "$md" .md)
+    mkdir -p "$USER_SKILLS/$name"
+    cp "$md" "$USER_SKILLS/$name/SKILL.md"
+    echo "  /$name"
+done
 
 # 4. 环境检查
 python3 preflight.py 2>/dev/null || echo "[WARN] 可选依赖未安装"
@@ -39,11 +43,5 @@ python3 preflight.py 2>/dev/null || echo "[WARN] 可选依赖未安装"
 echo ""
 echo "========================================"
 echo "  Install complete!"
-echo ""
-echo "  Skills:"
-for f in "$SKILLS_DIR"/*.md; do
-    echo "    /$(basename "$f" .md)"
-done
-echo ""
 echo "  Use anywhere: /reverse-orchestrator /path/to/app.apk"
 echo "========================================"
