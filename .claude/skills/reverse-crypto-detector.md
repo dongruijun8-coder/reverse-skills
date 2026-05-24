@@ -27,7 +27,7 @@ Check for these signals:
 
 ### Step 2: Identify Algorithm
 
-Read `kb/patterns/crypto_patterns.md` and match:
+Read `~/.claude/reverse-skills/kb/patterns/crypto_patterns.md` and match:
 
 AES-ECB indicators:
 - `mode: CryptoJS.mode.ECB` or no mode specified → ECB

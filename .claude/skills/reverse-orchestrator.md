@@ -17,8 +17,8 @@ The user provides:
 ## State Management
 
 Before starting any work:
-1. Check if `projects/{app_name}/.agent_state.json` exists → if yes, offer to resume
-2. Create `projects/{app_name}/` directory if new
+1. Check if `~/.claude/reverse-skills/projects/{app_name}/.agent_state.json` exists → if yes, offer to resume
+2. Create `~/.claude/reverse-skills/projects/{app_name}/` directory if new
 3. Initialize `.agent_state.json` with current phase = 0
 4. Save state BEFORE each phase, update AFTER each phase completes
 
@@ -43,13 +43,13 @@ Execute phases 0-5 in order. For each phase:
 **Steps:**
 1. Call `apk_unpack(apk_path, output_dir)` → get file tree
 2. Call `apk_detect_packer(unpacked_dir)` → get packer type
-3. Read `kb/patterns/packer_patterns.md` → determine strategy
-4. Read `kb/patterns/anti_patterns.md` → skip doomed strategies
+3. Read `~/.claude/reverse-skills/kb/patterns/packer_patterns.md` → determine strategy
+4. Read `~/.claude/reverse-skills/kb/patterns/anti_patterns.md` → skip doomed strategies
 5. Call `apk_extract_manifest(unpacked_dir)` → get package, version, permissions, network_config
 6. Call `apk_string_search(unpacked_dir, patterns=[URL_REGEX, KEY_REGEX, IP_REGEX])` → get domain/key candidates
 7. IF packer == "none": call `apk_decompile(apk_path, output_dir)` → search for API classes
 8. IF packer != "none": mark decompile_skipped=true, list assets/ directory for H5/JS files
-9. Read `kb/case_library/index.json` → search for similar cases by tags
+9. Read `~/.claude/reverse-skills/kb/case_library/index.json` → search for similar cases by tags
 10. Save state, output summary
 
 **Output:** packer type, strategy decisions, domain candidates, key candidates, matched cases
@@ -79,7 +79,7 @@ Execute phases 0-5 in order. For each phase:
 2. Call `proxy_start(port=8080, output_dir=...)` → start mitmproxy
 3. Call `adb_shell("settings put global http_proxy ...")` → set system proxy
 4. Launch app, wait 60s, call `proxy_list_flows()` → check for traffic
-5. IF no traffic: follow `kb/patterns/ssl_bypass_strategies.md` decision tree
+5. IF no traffic: follow `~/.claude/reverse-skills/kb/patterns/ssl_bypass_strategies.md` decision tree
 6. Run hook track in parallel (if not skipped): hook_gen_frida → hook_run → collect keys
 7. Call `proxy_stop()` → export .mitm file
 8. Log all strategies attempted + results to strategy_stack
@@ -104,7 +104,7 @@ Execute phases 0-5 in order. For each phase:
 
 **Steps:**
 1. Invoke `/reverse-auth-flow-composer` skill
-2. Match auth flow pattern from `kb/patterns/auth_flow_patterns.md`
+2. Match auth flow pattern from `~/.claude/reverse-skills/kb/patterns/auth_flow_patterns.md`
 3. Execute auth chain step by step
 4. Verify final authenticated request returns real data
 5. IF 403 → loop back to Phase 3 (sign error)
@@ -128,8 +128,8 @@ Execute phases 0-5 in order. For each phase:
    e. `plugin.fetch_rooms({})` — Returns > 0 rooms
 5. IF any smoke test fails → feedback loop to corresponding phase
 6. Generate audit.jsonl summary
-7. Write case to `kb/case_library/{app}_{date}/`
-8. Update `kb/case_library/index.json`
+7. Write case to `~/.claude/reverse-skills/kb/case_library/{app}_{date}/`
+8. Update `~/.claude/reverse-skills/kb/case_library/index.json`
 9. Output final summary
 
 ## Progress Reporting
@@ -142,7 +142,7 @@ Execute phases 0-5 in order. For each phase:
 
 ## Audit Logging
 
-Write to `projects/{app}/audit.jsonl` using these event types:
+Write to `~/.claude/reverse-skills/projects/{app}/audit.jsonl` using these event types:
 - `PHASE_START` / `PHASE_COMPLETE`: phase boundaries with timestamps
 - `TOOL_CALL`: tool name, params (sanitized), result, duration_ms
 - `DECISION`: decision, reason, source (which KB file)

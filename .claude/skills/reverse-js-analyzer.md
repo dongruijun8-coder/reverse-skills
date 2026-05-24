@@ -26,7 +26,7 @@ Search each JS file for these keywords:
 
 ### Step 2: For Each Candidate — Compute Confidence
 
-Read `kb/confidence_rules.json` and evaluate each pattern:
+Read `~/.claude/reverse-skills/kb/confidence_rules.json` and evaluate each pattern:
 
 MD5_key_pattern:
 - Has MD5 call? (+10)

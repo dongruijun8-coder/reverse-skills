@@ -20,8 +20,8 @@ Call `apk_detect_packer(unpacked_dir)`. Check for these .so files:
 - None of the above → "none"
 
 ### Step 3: Determine Strategy
-Read `kb/patterns/packer_patterns.md` for the detected packer → set strategy.
-Read `kb/patterns/anti_patterns.md` → mark any strategies as "skip".
+Read `~/.claude/reverse-skills/kb/patterns/packer_patterns.md` for the detected packer → set strategy.
+Read `~/.claude/reverse-skills/kb/patterns/anti_patterns.md` → mark any strategies as "skip".
 
 ### Step 4: Extract Manifest
 Call `apk_extract_manifest(unpacked_dir)`. Extract:
@@ -53,7 +53,7 @@ IF packer != "none":
   List `assets/` directory. Note any `.js` or `.html` files → these are H5 analysis targets.
 
 ### Step 7: Case Matching
-Read `kb/case_library/index.json`. Search for cases where:
+Read `~/.claude/reverse-skills/kb/case_library/index.json`. Search for cases where:
 - `tags.packer` matches detected packer
 - `tags.category` matches (infer from app name, permissions, string scan)
 

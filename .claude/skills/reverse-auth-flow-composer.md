@@ -19,7 +19,7 @@ Orchestrate the authentication flow discovered during reverse engineering. Execu
 
 ### Step 1: Match Auth Pattern
 
-Read `kb/patterns/auth_flow_patterns.md` and match against discovered endpoints:
+Read `~/.claude/reverse-skills/kb/patterns/auth_flow_patterns.md` and match against discovered endpoints:
 
 **Sign Token Chain indicators:**
 - Endpoint named "key", "sign/token", "getSign"
