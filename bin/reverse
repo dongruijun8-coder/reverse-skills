@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Reverse Skills CLI — one entry point for all 28 tools.
+Usage: reverse <tool_name> '<json_args>'
+       reverse list
+"""
+import json
+import sys
+import os
+# Find reverse-skills root: this script is at <root>/bin/reverse
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from mcp_tools.server import call_tool, list_tools
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] == "list":
+        tools = list_tools()
+        print(f"Reverse Skills — {len(tools)} tools")
+        for t in tools:
+            print(f"  {t}")
+    else:
+        name = sys.argv[1]
+        args = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+        result = call_tool(name, **args)
+        print(json.dumps(result, ensure_ascii=False))

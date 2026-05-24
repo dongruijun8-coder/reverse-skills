@@ -45,7 +45,16 @@ Get-ChildItem "$InstallDir\.claude\skills\*.md" | ForEach-Object {
     Write-Host "  /$skillName" -ForegroundColor Cyan
 }
 
-# 4. 环境检查
+# 4. 添加 CLI 到 PATH
+$BinDir = "$InstallDir\bin"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($UserPath -notlike "*$BinDir*") {
+    Write-Host "[PATH] 添加 reverse CLI..." -ForegroundColor Yellow
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$BinDir", "User")
+    $env:Path = "$env:Path;$BinDir"
+}
+
+# 5. 环境检查
 Write-Host ""
 python preflight.py 2>$null
 if ($LASTEXITCODE -ne 0) {

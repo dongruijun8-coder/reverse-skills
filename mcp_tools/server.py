@@ -92,9 +92,14 @@ def call_tool(name: str, **kwargs) -> dict:
 
 
 if __name__ == "__main__":
-    # When run directly, print tool list
-    tools = list_tools()
-    print(f"Reverse Agent MCP Server — {len(tools)} tools registered")
-    for t in tools:
-        doc = TOOLS[t].__doc__ or "(no docstring)"
-        print(f"  {t}: {doc.split(chr(10))[0]}")
+    if len(sys.argv) < 2:
+        tools = list_tools()
+        print(f"Reverse Skills — {len(tools)} tools registered")
+        for t in tools:
+            doc = TOOLS[t].__doc__ or "(no docstring)"
+            print(f"  {t}: {doc.split(chr(10))[0]}")
+    else:
+        tool_name = sys.argv[1]
+        args = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+        result = call_tool(tool_name, **args)
+        print(json.dumps(result, ensure_ascii=False))
