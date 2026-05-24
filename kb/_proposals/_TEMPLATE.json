@@ -1,0 +1,23 @@
+{
+  "_note": "Template for KB update proposals. Copy and fill in.",
+  "id": "YYYY-MM-DD-short-description",
+  "type": "new_pattern",
+  "_valid_types": ["new_pattern", "new_anti_pattern", "packer_update", "case_update", "correction"],
+  "priority": "confirmed | suspected | anti_pattern",
+  "target_file": "kb/patterns/sign_patterns.md",
+  "discovered_by": "agent",
+  "discovered_at": "2026-05-24T00:00:00Z",
+  "app": "mengyin",
+  "app_package": "com.qiyu.dream",
+  "finding": {
+    "title": "Short description of the finding",
+    "description": "Detailed description of what was found",
+    "evidence": ["What confirmed this", "Verification results"],
+    "js_snippet": "Optional JS code snippet",
+    "python_equivalent": "Optional Python equivalent"
+  },
+  "proposed_addition": "Exact text to add to the target file",
+  "confidence": 90,
+  "verified": true,
+  "verification_method": "crypto_sign_verify / crypto_aes / manual"
+}

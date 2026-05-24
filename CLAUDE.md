@@ -48,3 +48,10 @@
 - 项目数据: projects/{app_name}/
 - 中间产物: projects/{app_name}/raw_flows/, projects/{app_name}/assets/
 - 最终产物: projects/{app_name}/api_spec.json, plugin.py, models.py
+
+### 9. 知识库自进化
+- 发现已知模式中不存在的新签名/加密/加固/认证模式时 → 写入 kb/_proposals/
+- 验证通过(confirmed)的提案下次逆向时视同正式 pattern 使用
+- 从未知模式强制退出(L4)前 → 必须先写 proposal 记录上下文
+- Phase 5 完成后列出本次产生的所有提案，供人工 review 合并
+- 详细规则: .claude/rules/knowledge-feedback-rules.md

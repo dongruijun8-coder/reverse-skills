@@ -1,0 +1,25 @@
+{
+  "id": "2026-05-24-sign-md5-empty-key",
+  "type": "new_pattern",
+  "priority": "confirmed",
+  "target_file": "kb/patterns/sign_patterns.md",
+  "discovered_by": "human",
+  "discovered_at": "2026-05-17T00:00:00Z",
+  "app": "梦音",
+  "app_package": "com.qiyu.dream",
+  "finding": {
+    "title": "MD5 + 空初始 key → API 获取活跃 key",
+    "description": "签名使用 MD5(sorted_params + &key= + key)，初始 key 为空字符串用于 /app/key 端点，活跃 key 从 /login/h5/sign/token 响应中 AES-ECB 解密获取",
+    "evidence": [
+      "app.js:4523 找到签名函数 I(e,t)，key 变量初始化为 var k=\"\"",
+      "crypto_sign_verify 空 key 验证通过 /app/key 请求",
+      "AES-ECB 解密 sign_token 后提取活跃 key，验证 /allrank/listV2 通过"
+    ],
+    "js_snippet": "var k=\"\"; function I(e,t){var n={};for(var r in e){if(EXCLUDE_KEYS.indexOf(r)===-1)n[r]=e[r]}n.pub_timestamp=t;var o=Object.keys(n).sort();var a=[];for(var i=0;i<o.length;i++)a.push(o[i]+\"=\"+n[o[i]]);return CryptoJS.MD5(a.join(\"&\")+\"&key=\"+k).toString().toUpperCase()}",
+    "python_equivalent": "hashlib.md5((sorted_query + '&key=' + key).encode()).hexdigest().upper()"
+  },
+  "proposed_addition": "## Pattern 1.1: MD5 + Key Suffix (Empty Initial Key)\n**Variant of MD5_key_suffix where initial sign_key is empty string**\n**JS Signature:** `var k=\"\"; MD5(params + \"&key=\" + k).toUpperCase()`\n**Key lifecycle:** Phase 1 use `k=\"\"` for /app/key → Phase 2 get encrypted sign_token from /sign/token → AES decrypt → extract active key → use for all subsequent requests\n**Cases:** mengyin_2026-05",
+  "confidence": 95,
+  "verified": true,
+  "verification_method": "crypto_sign_verify"
+}
