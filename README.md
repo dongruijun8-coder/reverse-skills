@@ -14,7 +14,7 @@
 
 ```bash
 # 方式 1: git clone (推荐)
-git clone https://github.com/YOUR_USER/reverse-agent.git
+git clone https://github.com/dongruijun8-coder/reverse-agent.git
 cd reverse-agent
 claude         # 在此目录启动 Claude Code
 
