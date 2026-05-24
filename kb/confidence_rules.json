@@ -1,0 +1,74 @@
+{
+  "sign_detection": {
+    "MD5_key_pattern": {
+      "conditions": [
+        {"check": "has_MD5_call", "weight": 10, "description": "JS code contains MD5() or CryptoJS.MD5() call"},
+        {"check": "input_contains_&key=", "weight": 40, "description": "MD5 input concatenated with '&key=' string"},
+        {"check": "input_has_sort_or_filter", "weight": 25, "description": "Parameters are sorted/filtered before hashing"},
+        {"check": "output_is_uppercase_hex", "weight": 15, "description": "MD5 result converted to uppercase hex string"},
+        {"check": "result_used_as_header_param", "weight": 10, "description": "Hash result assigned to request header or body param named 'sign'"}
+      ],
+      "thresholds": {"confident": 70, "suspicious": 40, "ignore": 0}
+    },
+    "HMAC_SHA256_pattern": {
+      "conditions": [
+        {"check": "has_HmacSHA256_call", "weight": 15},
+        {"check": "key_is_separate_parameter", "weight": 35},
+        {"check": "data_is_concatenated_params", "weight": 30},
+        {"check": "output_is_hex_or_base64", "weight": 20}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "custom_sort_hash_pattern": {
+      "conditions": [
+        {"check": "has_sort_call", "weight": 20},
+        {"check": "has_join_call", "weight": 20},
+        {"check": "has_hash_after_join", "weight": 30},
+        {"check": "has_key_concatenation", "weight": 30}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    }
+  },
+  "crypto_detection": {
+    "AES_ECB_pattern": {
+      "conditions": [
+        {"check": "has_AES_call", "weight": 10},
+        {"check": "mode_is_ECB_or_missing", "weight": 30},
+        {"check": "no_iv_parameter", "weight": 25},
+        {"check": "key_is_static_string", "weight": 20},
+        {"check": "padding_is_PKCS7", "weight": 15}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "AES_CBC_pattern": {
+      "conditions": [
+        {"check": "has_AES_call", "weight": 10},
+        {"check": "has_iv_parameter", "weight": 35},
+        {"check": "iv_is_fixed_or_key_prefix", "weight": 25},
+        {"check": "padding_is_PKCS7", "weight": 15},
+        {"check": "mode_is_CBC", "weight": 15}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    }
+  },
+  "packer_detection": {
+    "360": {
+      "conditions": [
+        {"check": "file_exists_libjiagu.so", "weight": 90},
+        {"check": "file_exists_libjiagu_x86.so", "weight": 10}
+      ],
+      "thresholds": {"confident": 80, "suspicious": 50, "ignore": 0}
+    }
+  },
+  "auth_flow_detection": {
+    "sign_token_chain": {
+      "conditions": [
+        {"check": "has_sign_header", "weight": 20},
+        {"check": "has_key_endpoint", "weight": 30},
+        {"check": "has_sign_token_endpoint", "weight": 30},
+        {"check": "key_endpoint_response_is_encrypted", "weight": 20}
+      ],
+      "thresholds": {"confident": 60, "suspicious": 35, "ignore": 0}
+    }
+  }
+}

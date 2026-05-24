@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "id": "mengyin_2026-05",
+      "app": "梦音",
+      "package": "com.qiyu.dream",
+      "date": "2026-05-17",
+      "duration_hours": 32,
+      "result": "success",
+      "tags": {
+        "category": "直播",
+        "packer": "360加固",
+        "sign": "MD5_key_suffix",
+        "crypto": ["AES-128-ECB"],
+        "auth": "ticket_session",
+        "ssl_bypass": "system_cert"
+      },
+      "similarity_keys": ["libjiagu.so", "MD5", "&key=", "pub_sign", "pub_enc", "pub_ticket", "encrypt_key", "MMKV", "share_data"],
+      "stats": {
+        "endpoints_found": 142,
+        "frida_attempts": 1,
+        "frida_success": false,
+        "h5_fallback_used": true,
+        "sign_verified": true,
+        "total_api_calls_made": 8
+      }
+    },
+    {
+      "id": "popo_2026-05",
+      "app": "漂漂",
+      "package": "os.imlive.main",
+      "date": "2026-05-22",
+      "duration_hours": 8,
+      "result": "success",
+      "tags": {
+        "category": "直播+视频",
+        "packer": "none",
+        "sign": "none",
+        "crypto": "none",
+        "auth": "token_chain",
+        "ssl_bypass": "system_proxy"
+      },
+      "similarity_keys": ["token", "S_OK", "F_BAN", "plpl", "params"],
+      "stats": {
+        "endpoints_found": 89,
+        "frida_attempts": 0,
+        "frida_success": null,
+        "h5_fallback_used": false,
+        "sign_verified": null,
+        "total_api_calls_made": 3
+      }
+    }
+  ]
+}
