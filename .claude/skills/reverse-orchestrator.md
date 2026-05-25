@@ -139,12 +139,28 @@ Execute phases 0-5 in order. For each phase:
 1. IF packer == "360": skip ALL hook strategies (anti_patterns.md)
 2. Call `proxy_start(port=8080, output_dir=...)` → start mitmproxy
 3. Call `adb_shell("settings put global http_proxy ...")` → set system proxy
-4. Launch app, wait 60s, call `proxy_list_flows()` → check for traffic
-5. IF no traffic: follow `~/.claude/reverse-skills/kb/patterns/ssl_bypass_strategies.md` decision tree
-6. Run hook track in parallel (if not skipped): hook_gen_frida → hook_run → collect keys
-7. Call `proxy_stop()` → export .mitm file
-8. Log all strategies attempted + results to strategy_stack
-9. IF all strategies exhausted: L3 path abandonment → continue with H5-only analysis
+4. Launch app, wait 60s for init, call `proxy_list_flows()` → check for initial traffic
+5. **UI 遍历提示:** 生成操作清单，提示用户在模拟器上手动点击各个页面，触发更多 API 请求：
+   - 根据 AndroidManifest 的 Activity 列表 + 常见泛娱乐 app 模式，生成结构化操作清单
+   - 每完成一项提示用户回车确认，或一次性列出全部让用户自行遍历
+   - 清单模板（按 app 类型调整）：
+     ```
+     □ 首页/推荐页 — 下拉刷新，等待加载完成
+     □ 房间/直播间列表 — 上下滑动，点击进入任意房间
+     □ 房间内 — 等待 30s，切换公屏/私聊 tab（如有）
+     □ 排行榜/榜单页 — 切换日榜/周榜/总榜 tab
+     □ 搜索页 — 搜索一个常见关键词
+     □ 用户个人页 — 点击头像进入，查看关注/粉丝列表
+     □ 设置/关于页 — 进入设置页面
+     □ 充值/钱包页 — 进入（不实际支付）
+     ```
+   - 用户确认全部完成后继续下一步
+6. Call `proxy_list_flows()` → 统计新增流量，确认覆盖了预期端点
+7. IF no traffic: follow `~/.claude/reverse-skills/kb/patterns/ssl_bypass_strategies.md` decision tree
+8. Run hook track in parallel (if not skipped): hook_gen_frida → hook_run → collect keys
+9. Call `proxy_stop()` → export .mitm file
+10. Log all strategies attempted + results to strategy_stack
+11. IF all strategies exhausted: L3 path abandonment → continue with H5-only analysis
 
 ### Phase 3: Algorithm Reverse Engineering
 
