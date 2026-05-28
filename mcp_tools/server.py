@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp_tools.adb_tools import (
     adb_device_info, adb_shell, adb_push_pull, adb_app_mgmt,
-    adb_list_apps, adb_install_cert
+    adb_list_apps, adb_install_cert, adb_health_check, adb_reconnect
 )
 from mcp_tools.apk_tools import (
     apk_unpack, apk_detect_packer, apk_decompile,
@@ -43,6 +43,14 @@ from mcp_tools.data_tools import (
 from mcp_tools.toolkit_bridge import (
     toolkit_analyze, toolkit_scaffold
 )
+from mcp_tools.pipeline_tools import (
+    pipeline_analyze_js, pipeline_detect_crypto, pipeline_match_case
+)
+from mcp_tools.state_tools import (
+    state_init, state_load, state_save,
+    state_phase_start, state_phase_done, state_phase_fail,
+    state_list_sessions, state_get_resume_plan
+)
 
 # ── Tool registry ──────────────────────────────────────────────────
 
@@ -53,6 +61,8 @@ TOOLS = {
     "adb_app_mgmt": adb_app_mgmt,
     "adb_list_apps": adb_list_apps,
     "adb_install_cert": adb_install_cert,
+    "adb_health_check": adb_health_check,
+    "adb_reconnect": adb_reconnect,
     "apk_unpack": apk_unpack,
     "apk_detect_packer": apk_detect_packer,
     "apk_decompile": apk_decompile,
@@ -75,6 +85,17 @@ TOOLS = {
     "web_fetch_js": web_fetch_js,
     "toolkit_analyze": toolkit_analyze,
     "toolkit_scaffold": toolkit_scaffold,
+    "pipeline_analyze_js": pipeline_analyze_js,
+    "pipeline_detect_crypto": pipeline_detect_crypto,
+    "pipeline_match_case": pipeline_match_case,
+    "state_init": state_init,
+    "state_load": state_load,
+    "state_save": state_save,
+    "state_phase_start": state_phase_start,
+    "state_phase_done": state_phase_done,
+    "state_phase_fail": state_phase_fail,
+    "state_list_sessions": state_list_sessions,
+    "state_get_resume_plan": state_get_resume_plan,
 }
 
 # ── MCP Tool Schemas (JSON Schema for each tool's parameters) ───────
@@ -142,6 +163,26 @@ TOOL_SCHEMAS = {
                 "cert_name": {"type": "string", "description": "Name for the certificate (default: mitmproxy)", "default": "mitmproxy"}
             },
             "required": ["cert_path"]
+        }
+    },
+    "adb_health_check": {
+        "description": "Comprehensive device health check — connectivity, root, app process, frida, magisk, disk, proxy",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "package": {"type": "string", "description": "Target app package to check if running"},
+                "check_frida": {"type": "boolean", "description": "Check frida/hluda server status"},
+                "check_magisk": {"type": "boolean", "description": "Check Magisk + DenyList status"}
+            },
+            "required": []
+        }
+    },
+    "adb_reconnect": {
+        "description": "Recover device connection — restart adb server, reconnect, re-root",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
         }
     },
     "apk_unpack": {
@@ -388,6 +429,40 @@ TOOL_SCHEMAS = {
             "required": ["url", "output_dir"]
         }
     },
+    "pipeline_analyze_js": {
+        "description": "Automated JS analysis — scan for sign/crypto patterns, extract keys and endpoints",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "js_file": {"type": "string", "description": "Path to a .js file from APK assets or web_fetch_js"},
+                "known_endpoints": {"type": "array", "items": {"type": "string"}, "description": "Optional API paths to search for"}
+            },
+            "required": ["js_file"]
+        }
+    },
+    "pipeline_detect_crypto": {
+        "description": "Scan captured .mitm flows for encryption signals (pub_enc, Base64 body, encrypted fields)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "flow_dump_file": {"type": "string", "description": "Path to .mitm dump file"}
+            },
+            "required": ["flow_dump_file"]
+        }
+    },
+    "pipeline_match_case": {
+        "description": "Match current app against case library and return pre-loaded hypotheses (sign, crypto, auth, hooks)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "packer": {"type": "string", "description": "Detected packer type", "default": ""},
+                "sign_keywords": {"type": "array", "items": {"type": "string"}, "description": "Keywords from string search"},
+                "category": {"type": "string", "description": "Inferred app category", "default": ""},
+                "package": {"type": "string", "description": "App package name (to skip self-match)", "default": ""}
+            },
+            "required": []
+        }
+    },
     "toolkit_analyze": {
         "description": "Analyze a .mitm flow dump to extract API spec. Falls back to FlowReader when reverse-toolkit unavailable.",
         "inputSchema": {
@@ -409,6 +484,97 @@ TOOL_SCHEMAS = {
                 "output_dir": {"type": "string", "description": "Directory to write plugin.py and models.py"}
             },
             "required": ["spec_path", "output_dir"]
+        }
+    },
+    "state_init": {
+        "description": "Initialize a new agent state file for checkpoint/resume support",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"},
+                "app_name": {"type": "string", "description": "App display name"},
+                "package": {"type": "string", "description": "Android package name", "default": ""},
+                "apk_path": {"type": "string", "description": "Original APK file path", "default": ""}
+            },
+            "required": ["project_dir", "app_name"]
+        }
+    },
+    "state_load": {
+        "description": "Load existing agent state from project directory",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"}
+            },
+            "required": ["project_dir"]
+        }
+    },
+    "state_save": {
+        "description": "Update and save agent state. Pass any fields as keyword arguments.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"}
+            },
+            "required": ["project_dir"]
+        }
+    },
+    "state_phase_start": {
+        "description": "Mark a phase as IN_PROGRESS with auto-save. Call BEFORE starting a phase.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"},
+                "phase": {"type": "string", "description": "Phase identifier (0, 0.5, 1, 2, 3, 4, 5)"},
+                "description": {"type": "string", "description": "Human-readable description of what this phase will do", "default": ""}
+            },
+            "required": ["project_dir", "phase"]
+        }
+    },
+    "state_phase_done": {
+        "description": "Mark a phase as DONE with auto-save. Call AFTER phase completes successfully.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"},
+                "phase": {"type": "string", "description": "Phase identifier"},
+                "summary": {"type": "string", "description": "One-line summary of what was accomplished", "default": ""},
+                "artifacts": {"type": "object", "description": "Dict of artifact paths produced this phase"}
+            },
+            "required": ["project_dir", "phase"]
+        }
+    },
+    "state_phase_fail": {
+        "description": "Record a phase failure. Tracks retry count. Returns DEGRADE signal at 3+ retries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"},
+                "phase": {"type": "string", "description": "Phase identifier that failed"},
+                "error": {"type": "string", "description": "Error description"},
+                "retry": {"type": "boolean", "description": "Set false to skip retry tracking", "default": True}
+            },
+            "required": ["project_dir", "phase", "error"]
+        }
+    },
+    "state_list_sessions": {
+        "description": "List all saved agent sessions with current phase and status",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "projects_dir": {"type": "string", "description": "Override projects directory path"}
+            },
+            "required": []
+        }
+    },
+    "state_get_resume_plan": {
+        "description": "Get a human-readable resume plan showing what's done, what's in progress, and next step",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string", "description": "Project directory path"}
+            },
+            "required": ["project_dir"]
         }
     },
 }

@@ -153,3 +153,121 @@ def adb_install_cert(cert_path: str, cert_name: str = "mitmproxy") -> dict:
 
     return {"status": "OK", "steps": steps, "build_type": build_type,
             "note": "Device rebooting. Wait 30s before next adb command."}
+
+
+# ── Device health & recovery ────────────────────────────────────────
+
+def adb_health_check(package: str | None = None,
+                     check_frida: bool = False,
+                     check_magisk: bool = False) -> dict:
+    """Comprehensive device health check. Call before each phase that needs the device.
+
+    Args:
+        package: Target app package name. If provided, checks if app is running.
+        check_frida: If True, check if frida/hluda server is running.
+        check_magisk: If True, check Magisk status and DenyList.
+    """
+    checks = {}
+    all_ok = True
+
+    # 1. Device connectivity
+    r = _adb("devices")
+    devices = [l for l in r['stdout'].split('\n') if '\tdevice' in l]
+    checks["device_connected"] = len(devices) > 0
+    if not checks["device_connected"]:
+        all_ok = False
+        return {"status": "DEGRADED", "checks": checks,
+                "error": "No device connected. Run: adb devices",
+                "recovery": "adb_reconnect"}
+
+    # 2. ADB root
+    r = _adb("shell whoami")
+    checks["adb_root"] = 'root' in r.get('stdout', '')
+    if not checks["adb_root"]:
+        _adb("root")
+        time.sleep(1)
+        r2 = _adb("shell whoami")
+        checks["adb_root_retry"] = 'root' in r2.get('stdout', '')
+
+    # 3. Build type
+    r = _adb("shell getprop ro.build.type")
+    checks["build_type"] = r.get('stdout', 'unknown').strip()
+
+    # 4. App process
+    if package:
+        r = _adb(f"shell ps | grep {package}")
+        checks["app_running"] = package in r.get('stdout', '')
+        if not checks["app_running"]:
+            all_ok = False
+
+    # 5. Frida/hluda server
+    if check_frida:
+        r = _adb("shell ps | grep -E 'frida|hluda'")
+        frida_procs = r.get('stdout', '')
+        checks["frida_running"] = bool(frida_procs)
+        checks["frida_processes"] = frida_procs if frida_procs else None
+        if not checks["frida_running"]:
+            all_ok = False
+
+    # 6. Magisk
+    if check_magisk:
+        r = _adb("shell magisk -c 2>/dev/null")
+        checks["magisk_version"] = r.get('stdout', '') if r.get('stdout') else None
+        checks["magisk_available"] = r['status'] == 'OK' and bool(r.get('stdout'))
+        # Check DenyList
+        if package:
+            r = _adb("shell magisk --denylist ls 2>/dev/null")
+            checks["magisk_denylist"] = package in r.get('stdout', '') if r.get('stdout') else False
+
+    # 7. Disk space
+    r = _adb("shell df /data | tail -1")
+    try:
+        parts = r.get('stdout', '').split()
+        checks["disk_free_mb"] = int(parts[3]) // 1024 if len(parts) > 3 else None
+    except Exception:
+        checks["disk_free_mb"] = None
+
+    # 8. Proxy settings
+    r = _adb("shell settings get global http_proxy")
+    proxy = r.get('stdout', '').strip()
+    checks["http_proxy"] = proxy if proxy and proxy != "null" else None
+
+    return {
+        "status": "OK" if all_ok else "DEGRADED",
+        "checks": checks,
+        "all_ok": all_ok,
+    }
+
+
+def adb_reconnect() -> dict:
+    """Try to recover device connection. Restarts adb server and reconnects."""
+    steps = []
+
+    # 1. Kill and restart adb server
+    r = _adb("kill-server", timeout=5)
+    steps.append({"step": "kill-server", "result": "OK"})
+    time.sleep(1)
+
+    r = _adb("start-server", timeout=10)
+    steps.append({"step": "start-server", "result": r['status']})
+    time.sleep(2)
+
+    # 2. Check devices
+    r = _adb("devices")
+    devices = [l for l in r['stdout'].split('\n') if '\tdevice' in l]
+    steps.append({"step": "list-devices", "count": len(devices), "devices": devices})
+
+    if not devices:
+        return {"status": "ERROR", "error": "No devices after reconnection. Check USB cable or emulator.",
+                "steps": steps}
+
+    # 3. Try root
+    r = _adb("root")
+    steps.append({"step": "adb-root", "result": r['status']})
+    time.sleep(1)
+
+    # 4. Verify root
+    r = _adb("shell whoami")
+    steps.append({"step": "verify-root", "is_root": 'root' in r.get('stdout', '')})
+
+    return {"status": "OK", "steps": steps, "device": devices[0].split('\t')[0] if devices else None}

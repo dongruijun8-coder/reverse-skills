@@ -104,10 +104,15 @@ The user provides:
 ## State Management
 
 Before starting any work:
-1. Check if `~/.claude/reverse-skills/projects/{app_name}/.agent_state.json` exists → if yes, offer to resume
-2. Create `~/.claude/reverse-skills/projects/{app_name}/` directory if new
-3. Initialize `.agent_state.json` with current phase = 0
-4. Save state BEFORE each phase, update AFTER each phase completes
+1. Check if `projects/{app_name}/.agent_state.json` exists → call `state_load(project_dir)`
+2. IF exists AND phase_status != "DONE" → call `state_get_resume_plan(project_dir)` → offer to resume
+3. IF new → call `state_init(project_dir, app_name, package, apk_path)`
+4. **Before EACH phase:** call `state_phase_start(project_dir, phase, description)` → auto-saves checkpoint
+5. **After EACH phase (SUCCESS):** call `state_phase_done(project_dir, phase, summary, artifacts)` → auto-saves + computes next phase
+6. **After EACH phase (FAIL):** call `state_phase_fail(project_dir, phase, error)` → tracks retry count → auto-signals DEGRADE at 3 attempts
+7. **Key discoveries during a phase:** call `state_save(project_dir, scratch={...})` to persist findings immediately
+
+**Resume flow:** User says "resume <app_name>" → Agent calls `state_get_resume_plan(project_dir)` → reads resume_phase → continues from that phase. All prior phase artifacts (api_spec fragments, extracted keys, hook scripts) are preserved in project_dir.
 
 ## Phase Execution
 
@@ -136,7 +141,7 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 6. Call `apk_string_search(unpacked_dir, patterns=[URL_REGEX, KEY_REGEX, IP_REGEX])` → get domain/key candidates
 7. IF packer == "none": call `apk_decompile(apk_path, output_dir)` → search for API classes
 8. IF packer != "none": mark decompile_skipped=true, list assets/ directory for H5/JS files
-9. Read `~/.claude/reverse-skills/kb/case_library/index.json` → search for similar cases:
+9. Call `pipeline_match_case(packer, sign_keywords, category, package)` → auto-match against case library:
    - Match by `similarity_keys` (packer .so name, sign keywords, crypto keywords)
    - Match by `tags.packer` (same packer → same bypass strategy)
    - Match by `tags.category` (same app type → similar API structure)
@@ -167,7 +172,9 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
    - Enable Magisk DenyList → add target app package
    - Install MagiskHide Props Config module if needed
    - Reboot device → verify Magisk status
-3. Determine Frida server type based on packer:
+3. IF taget packer requires Magisk/hluda → call `adb_health_check(package=package, check_frida=True, check_magisk=True)`
+   IF degraded → call `adb_reconnect()` → retry health check
+4. Determine Frida server type based on packer:
    - NIS (libnesec.so) → push hluda-server ONLY (NOT frida-server). `adb push hluda-server /data/local/tmp/`
    - 360 (libjiagu.so) → skip all frida prep, mark hooks_disabled
    - Other / none → push frida-server: `adb push frida-server /data/local/tmp/`
@@ -290,8 +297,10 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 
 **Steps — Static JS Analysis Path (3b):**
 
-1. Invoke `/reverse-js-analyzer` skill on all JS files (parallel agents if JS > 3 AND > 200KB)
-2. Invoke `/reverse-crypto-detector` skill on captured responses and JS files
+1. For each JS file: call `pipeline_analyze_js(js_file)` → automated scan for sign/crypto/key/endpoint patterns
+   (replaces manual /reverse-js-analyzer steps 1-4; parallel agents if JS > 3 AND > 200KB)
+2. Call `pipeline_detect_crypto(flow_dump_file)` → automated encryption signal scan on captured flows
+   (replaces manual /reverse-crypto-detector steps 1-2)
 3. Run `toolkit_analyze(mitm_file, app_name)` → get endpoint list (parallel with JS analysis)
 
 **Steps — Common (3c):**

@@ -96,9 +96,9 @@
       }
     },
     {
-      "id": "nis_app_2026-05",
-      "app": "本次实战App",
-      "package": "(NIS protected)",
+      "id": "shuangyu_2026-05",
+      "app": "双鱼部落",
+      "package": "com.shuangyu.tribe",
       "date": "2026-05-28",
       "duration_hours": 4,
       "result": "success",

@@ -35,7 +35,37 @@
 **Cases:** mengyin_2026-05 (ticket from share_data.xml, pub_ticket header, ~hours lifetime)
 **Complexity:** Medium. No login flow to reverse, but ticket extraction is device-dependent.
 
-## Pattern 4: Standard OAuth2
+## Pattern 4: Multi-Channel Auth (IM + Push)
+
+**Flow:** HTTP login → extract multiple credentials → connect IM SDK (RongCloud/TencentIM) → connect MQTT push → connect WebSocket
+
+**Endpoints:** `/login` (HTTP) → IM SDK connect (TCP/proprietary) → MQTT broker (TCP) → WebSocket (WSS)
+
+**Detection:**
+- Login response contains `im_token`, `chat_token`, `rong_token`, or `tim_token` alongside HTTP token
+- APK contains IM SDK libraries: RongCloud (`libRong*`), TencentIM (`libImSDK*`), 环信 (`libhyphenate*`)
+- Multiple persistent connections after login (MQTT port 1883/8883, WebSocket)
+- Push service initialization in Application.onCreate()
+
+**Extract:**
+- im_token from login response (used for IM SDK auth)
+- mqtt_credentials (clientId, username, password) from login response or separate endpoint
+- websocket_token for real-time updates
+
+**Chain:**
+1. HTTP POST /login with phone/SMS → get HTTP token + IM token + MQTT credentials
+2. Connect RongCloud: `RongIMClient.connect(token, callback)`
+3. Connect MQTT: `MqttClient.connect(broker, clientId, username, password)`
+4. Connect WebSocket with auth token for push notifications
+5. All three channels stay alive simultaneously
+
+**Complexity:** Very High. Three independent auth chains. Each has different token lifecycle. IM/MQTT tokens may refresh independently of HTTP token.
+
+**Cases:** 双鱼部落 2026-05 (HTTP login → RongCloud IM + MQTT + TencentIM + WebSocket, plaintext password)
+
+**Key indicator in traffic:** Login response JSON has 5+ distinct token/credential fields. Look for `rongToken`, `imToken`, `mqttClientId`, `mqttPassword`, `timSig`.
+
+## Pattern 5: Standard OAuth2
 **Flow:** Authorize → get code → exchange code for token → refresh token on expiry
 **Endpoints:** `/oauth/authorize`, `/oauth/token`, `/oauth/refresh`
 **Detection:** Standard OAuth2 parameter names: client_id, client_secret, grant_type, redirect_uri, code, refresh_token

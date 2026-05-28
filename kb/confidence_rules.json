@@ -2,7 +2,7 @@
   "sign_detection": {
     "MD5_key_pattern": {
       "conditions": [
-        {"check": "has_MD5_call", "weight": 10, "description": "JS code contains MD5() or CryptoJS.MD5() call"},
+        {"check": "has_MD5_call", "weight": 10, "description": "JS/Java code contains MD5() or CryptoJS.MD5() call"},
         {"check": "input_contains_&key=", "weight": 40, "description": "MD5 input concatenated with '&key=' string"},
         {"check": "input_has_sort_or_filter", "weight": 25, "description": "Parameters are sorted/filtered before hashing"},
         {"check": "output_is_uppercase_hex", "weight": 15, "description": "MD5 result converted to uppercase hex string"},
@@ -27,8 +27,30 @@
         {"check": "has_key_concatenation", "weight": 30}
       ],
       "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "XOR_pattern": {
+      "note": "双鱼部落实战发现 — p1 XOR p2 还原明文参数",
+      "conditions": [
+        {"check": "params_have_two_encoded_fields", "weight": 25, "description": "Request has p1 + p2 (or similar paired encoded fields)"},
+        {"check": "both_fields_same_length_base64", "weight": 20, "description": "p1 and p2 are same-length Base64 strings"},
+        {"check": "xor_result_is_plaintext_json", "weight": 35, "description": "p1 XOR p2 produces readable JSON or key=value"},
+        {"check": "no_standard_crypto_import_found", "weight": 10, "description": "No AES/RC4/RSA imports in related code"},
+        {"check": "one_field_is_random_nonce", "weight": 10, "description": "One of the fields looks like random bytes (nonce/key stream)"}
+      ],
+      "thresholds": {"confident": 70, "suspicious": 40, "ignore": 0}
+    },
+    "custom_native_sign": {
+      "note": "Native层签名 — 无Java/JS调用, 需so分析",
+      "conditions": [
+        {"check": "sign_param_present_no_algo_found", "weight": 30, "description": "sign/signature param exists but no sign logic in Java/JS"},
+        {"check": "native_lib_has_sign_function", "weight": 35, "description": "Native .so exports getSign/computeSign via JNI"},
+        {"check": "sign_length_is_32_or_64_hex", "weight": 15, "description": "Sign value is 32 or 64 char hex"},
+        {"check": "frida_hook_native_possible", "weight": 20, "description": "Packer allows native hook (NIS: OK, 360: NO)"}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
     }
   },
+
   "crypto_detection": {
     "AES_ECB_pattern": {
       "conditions": [
@@ -49,8 +71,61 @@
         {"check": "mode_is_CBC", "weight": 15}
       ],
       "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "AES_GCM_pattern": {
+      "note": "AES-GCM — 无padding, 16字节auth tag",
+      "conditions": [
+        {"check": "has_AES_call", "weight": 10},
+        {"check": "mode_is_GCM", "weight": 30},
+        {"check": "has_nonce_or_iv_12_bytes", "weight": 25},
+        {"check": "no_padding_in_code", "weight": 20},
+        {"check": "ciphertext_has_trailing_16_bytes", "weight": 15}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "RC4_pattern": {
+      "conditions": [
+        {"check": "has_RC4_call_or_keystream", "weight": 30},
+        {"check": "swap_based_keystream_function", "weight": 25},
+        {"check": "output_is_hex", "weight": 20},
+        {"check": "key_is_short_hex_string", "weight": 15},
+        {"check": "no_block_cipher_import", "weight": 10}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "RSA_pattern": {
+      "conditions": [
+        {"check": "has_RSA_call", "weight": 20},
+        {"check": "long_base64_public_key_string", "weight": 40},
+        {"check": "Cipher_getInstance_RSA", "weight": 30},
+        {"check": "PKCS1_or_OAEP_padding", "weight": 10}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "multi_layer_encryption": {
+      "note": "双层加密 — 梦音/双鱼部落模式: 外层pub_enc标记 + 内层data字段加密",
+      "conditions": [
+        {"check": "pub_enc_header_present", "weight": 30, "description": "pub_enc: true header in request/response"},
+        {"check": "response_is_base64_not_json", "weight": 20, "description": "Raw response body is Base64, not valid JSON"},
+        {"check": "decrypted_response_has_encrypted_field", "weight": 25, "description": "After decrypting outer layer, data field is also Base64/encrypted"},
+        {"check": "two_different_keys_in_code", "weight": 15, "description": "Two distinct keys found (outer_key + inner_key)"},
+        {"check": "two_encrypt_calls_in_pipeline", "weight": 10, "description": "Sequential encrypt(encrypt(data)) or decrypt(decrypt(data)) in code"}
+      ],
+      "thresholds": {"confident": 60, "suspicious": 30, "ignore": 0}
+    },
+    "custom_obfuscated_crypto": {
+      "note": "自定义混淆加密 — XOR/Base64/自定义字节操作",
+      "conditions": [
+        {"check": "custom_byte_operations_on_api_data", "weight": 25, "description": "XOR, bit shift, or byte swapping on request/response data"},
+        {"check": "no_standard_crypto_library_import", "weight": 20},
+        {"check": "base64_encode_decode_in_pipeline", "weight": 20},
+        {"check": "magic_bytes_or_prefix_in_output", "weight": 15},
+        {"check": "string_decrypt_function_found", "weight": 20, "description": "Custom function named decrypt/encode/decode near HTTP client code"}
+      ],
+      "thresholds": {"confident": 55, "suspicious": 30, "ignore": 0}
     }
   },
+
   "packer_detection": {
     "360": {
       "conditions": [
@@ -58,8 +133,46 @@
         {"check": "file_exists_libjiagu_x86.so", "weight": 10}
       ],
       "thresholds": {"confident": 80, "suspicious": 50, "ignore": 0}
+    },
+    "netease_nis": {
+      "conditions": [
+        {"check": "file_exists_libnesec.so", "weight": 85},
+        {"check": "manifest_MyApplication_wraps_NIS", "weight": 15}
+      ],
+      "thresholds": {"confident": 75, "suspicious": 50, "ignore": 0}
+    },
+    "tencent_legu": {
+      "conditions": [
+        {"check": "file_exists_libshella", "weight": 70},
+        {"check": "file_exists_libtup.so", "weight": 30}
+      ],
+      "thresholds": {"confident": 70, "suspicious": 45, "ignore": 0}
+    },
+    "bangbang": {
+      "conditions": [
+        {"check": "file_exists_libDexHelper.so", "weight": 80},
+        {"check": "file_exists_libDexHelper-x86.so", "weight": 20}
+      ],
+      "thresholds": {"confident": 70, "suspicious": 50, "ignore": 0}
+    },
+    "aijiami": {
+      "conditions": [
+        {"check": "file_exists_libexec.so", "weight": 50},
+        {"check": "file_exists_libexecmain.so", "weight": 30},
+        {"check": "file_exists_libijmdata.so", "weight": 20}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 40, "ignore": 0}
+    },
+    "emulator_detection": {
+      "conditions": [
+        {"check": "file_exists_libemulatordetector.so", "weight": 70},
+        {"check": "app_crashes_on_non_arm_device", "weight": 20},
+        {"check": "ro_build_type_is_user", "weight": 10}
+      ],
+      "thresholds": {"confident": 60, "suspicious": 40, "ignore": 0}
     }
   },
+
   "auth_flow_detection": {
     "sign_token_chain": {
       "conditions": [
@@ -69,6 +182,49 @@
         {"check": "key_endpoint_response_is_encrypted", "weight": 20}
       ],
       "thresholds": {"confident": 60, "suspicious": 35, "ignore": 0}
+    },
+    "ticket_session": {
+      "conditions": [
+        {"check": "no_login_api_in_traffic", "weight": 25},
+        {"check": "has_pub_ticket_in_headers", "weight": 35},
+        {"check": "ticket_found_in_local_storage", "weight": 25},
+        {"check": "ticket_is_long_base64_or_serialized", "weight": 15}
+      ],
+      "thresholds": {"confident": 60, "suspicious": 35, "ignore": 0}
+    },
+    "token_chain_sms": {
+      "conditions": [
+        {"check": "has_sms_endpoint", "weight": 25},
+        {"check": "has_login_endpoint_after_sms", "weight": 35},
+        {"check": "login_response_has_token_field", "weight": 30},
+        {"check": "all_requests_include_token", "weight": 10}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 35, "ignore": 0}
+    },
+    "multi_channel_auth": {
+      "note": "多通道认证 — 双鱼部落模式: HTTP + RongCloud IM + MQTT + TencentIM",
+      "conditions": [
+        {"check": "has_im_sdk_imports", "weight": 20, "description": "RongCloud/TencentIM/环信 SDK found in APK"},
+        {"check": "login_response_has_im_token", "weight": 30, "description": "Login response includes IM token or chat credentials"},
+        {"check": "has_mqtt_connection", "weight": 20, "description": "MQTT connection with device credentials after login"},
+        {"check": "has_multiple_auth_headers", "weight": 15, "description": "Multiple Authorization/auth header types in traffic"},
+        {"check": "has_push_service_init", "weight": 15, "description": "Push service initialization after auth complete"}
+      ],
+      "thresholds": {"confident": 55, "suspicious": 30, "ignore": 0}
+    }
+  },
+
+  "hook_safety_assessment": {
+    "note": "评估特定packer下Frida hook操作的风险等级",
+    "NIS_hook_safety": {
+      "conditions": [
+        {"check": "target_is_system_class", "weight": 30, "description": "Hooking javax.crypto.* / java.security.* → Safe"},
+        {"check": "target_is_okhttp_high_level", "weight": 20, "description": "Hooking OkHttpClient.newCall / RequestBuilder.header → Safe"},
+        {"check": "target_is_app_impl_class", "weight": 15, "description": "Hooking app-specific HttpClientImp.createCall → Safe (if targeted)"},
+        {"check": "no_reflection_or_cast", "weight": 25, "description": "No getDeclaredFields / Java.cast / Object.keys → Safe"},
+        {"check": "single_hook_only", "weight": 10, "description": "Only one hook point per script → Safest"}
+      ],
+      "thresholds": {"safe": 70, "unstable": 40, "dangerous": 0}
     }
   }
 }
