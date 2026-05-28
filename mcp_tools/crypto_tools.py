@@ -9,18 +9,26 @@ from Crypto.PublicKey import RSA as RSAKey
 from Crypto.Util.Padding import pad, unpad
 
 
-def crypto_aes(mode: str, key: str, data: str, iv: str | None = None, operation: str = "decrypt") -> dict:
-    """AES encrypt/decrypt.
+def crypto_aes(mode: str, key: str, data: str, iv: str | None = None,
+               operation: str = "decrypt", key_size: int = 128) -> dict:
+    """AES encrypt/decrypt. Supports ECB, CBC, GCM modes.
 
     Args:
-        mode: "ECB" or "CBC"
-        key: 16-byte key string (AES-128)
+        mode: "ECB", "CBC", or "GCM"
+        key: Key string. For AES-128: 16 chars. For AES-256: 32 chars.
         data: Base64-encoded input for decrypt, plain text for encrypt
-        iv: 16-byte IV string (required for CBC, ignored for ECB)
+        iv: IV/nonce string. 16 bytes for CBC. 12 bytes recommended for GCM.
         operation: "encrypt" or "decrypt"
+        key_size: 128 or 256 (bits). Determines key length: 16 or 32 bytes.
     """
+    expected_len = 32 if key_size == 256 else 16
     try:
-        key_bytes = key.encode() if len(key) == 16 else key[:16].encode()
+        if len(key) >= expected_len:
+            key_bytes = key[:expected_len].encode()
+        elif len(key) >= 16:
+            key_bytes = key[:16].encode()
+        else:
+            key_bytes = key.encode().ljust(16, b'\x00')
     except Exception as e:
         return {"status": "ERROR", "error": f"Invalid key: {e}"}
 
@@ -30,28 +38,47 @@ def crypto_aes(mode: str, key: str, data: str, iv: str | None = None, operation:
         elif mode.upper() == "CBC":
             iv_bytes = (iv.encode() if iv else key_bytes)[:16]
             cipher = AES.new(key_bytes, AES.MODE_CBC, iv=iv_bytes)
+        elif mode.upper() == "GCM":
+            iv_bytes = (iv.encode() if iv else key_bytes)[:16]
+            if len(iv_bytes) < 8:
+                return {"status": "ERROR", "error": "GCM nonce too short (min 8 bytes recommended)"}
+            cipher = AES.new(key_bytes, AES.MODE_GCM, nonce=iv_bytes)
         else:
-            return {"status": "ERROR", "error": f"Unknown mode: {mode}"}
+            return {"status": "ERROR", "error": f"Unknown mode: {mode}. Supported: ECB, CBC, GCM"}
     except Exception as e:
         return {"status": "ERROR", "error": f"Cipher init failed: {e}"}
 
     try:
         if operation == "decrypt":
-            raw = cipher.decrypt(base64.b64decode(data))
-            unpadded = unpad(raw, 16)
-            result = unpadded.decode('utf-8')
+            raw = base64.b64decode(data)
+            if mode.upper() == "GCM":
+                if len(raw) < 17:
+                    return {"status": "ERROR", "error": "GCM data too short (need ciphertext + 16-byte tag)"}
+                ct_bytes = raw[:-16]
+                tag = raw[-16:]
+                plain = cipher.decrypt_and_verify(ct_bytes, tag)
+                result = plain.decode('utf-8')
+            else:
+                plain = cipher.decrypt(raw)
+                unpadded = unpad(plain, 16)
+                result = unpadded.decode('utf-8')
+
             is_json = False
             try:
                 parsed = json.loads(result)
                 is_json = True
             except json.JSONDecodeError:
                 parsed = result
-            return {"status": "OK", "result": parsed, "is_json": is_json, "raw": result}
+            return {"status": "OK", "result": parsed, "is_json": is_json, "raw": result, "mode": mode.upper()}
         else:
-            raw = data.encode()
-            padded = pad(raw, 16)
-            encrypted = cipher.encrypt(padded)
-            return {"status": "OK", "result": base64.b64encode(encrypted).decode()}
+            plain = data.encode()
+            if mode.upper() == "GCM":
+                ct_bytes, tag = cipher.encrypt_and_digest(plain)
+                encrypted = ct_bytes + tag
+            else:
+                padded = pad(plain, 16)
+                encrypted = cipher.encrypt(padded)
+            return {"status": "OK", "result": base64.b64encode(encrypted).decode(), "mode": mode.upper()}
     except Exception as e:
         return {"status": "ERROR", "error": f"Operation failed: {e}"}
 

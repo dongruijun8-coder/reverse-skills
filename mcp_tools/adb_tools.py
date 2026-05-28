@@ -1,14 +1,22 @@
 """ADB tools — device info, shell, push/pull, app management, cert installation."""
+import os
 import subprocess
 import time
 from pathlib import Path
 
 
+# Detect MSYS2/MINGW environment — paths like /sdcard/ get mangled to E:/Git/sdcard/
+_IS_MSYS = "MSYSTEM" in os.environ or "MINGW" in os.environ.get("MSYSTEM", "")
+
+
 def _adb(cmd: str, timeout: int = 30) -> dict:
-    """Run an adb command and return structured result."""
+    """Run an adb command and return structured result.
+    Auto-adds MSYS_NO_PATHCONV=1 on MSYS2/MinGW to prevent path mangling.
+    """
+    prefix = "MSYS_NO_PATHCONV=1 " if _IS_MSYS else ""
     try:
         result = subprocess.run(
-            f"adb {cmd}",
+            f"{prefix}adb {cmd}",
             shell=True, capture_output=True, text=True, timeout=timeout
         )
         return {
@@ -96,12 +104,31 @@ def adb_list_apps(filter_str: str | None = None) -> dict:
 
 
 def adb_install_cert(cert_path: str, cert_name: str = "mitmproxy") -> dict:
-    """Install a CA certificate as a system trusted credential."""
+    """Install a CA certificate as a system trusted credential.
+
+    SAFETY: Checks ro.build.type before remount. On production/user builds,
+    refuses to remount and suggests MoveCertificate (Magisk module) instead.
+    """
     cert = Path(cert_path)
     if not cert.exists():
         return {"status": "ERROR", "error": f"Certificate not found: {cert_path}"}
 
     steps = []
+
+    # Check build type BEFORE doing anything dangerous
+    r = _adb("shell getprop ro.build.type")
+    build_type = r.get('stdout', 'user').strip()
+    if build_type == "user":
+        return {
+            "status": "BLOCKED",
+            "error": "Device is production/user build. Cannot remount /system.",
+            "build_type": "user",
+            "recommendation": "Use MoveCertificate Magisk module to move user CA to system trust store: "
+                              "1. Install MoveCertificate module in Magisk "
+                              "2. Install cert as user CA: adb install-mitm-ca-user "
+                              "3. Reboot — MoveCertificate auto-copies user CA to system",
+            "alternative": "If device is rooted, try: adb shell su -c 'mount -o rw,remount /system' manually",
+        }
 
     r = _adb("shell whoami")
     if 'root' not in r.get('stdout', ''):
@@ -110,6 +137,9 @@ def adb_install_cert(cert_path: str, cert_name: str = "mitmproxy") -> dict:
 
     r = _adb("remount")
     steps.append({"step": "remount", "result": r['status']})
+    if r['status'] != 'OK':
+        return {"status": "ERROR", "error": f"Remount failed: {r.get('stderr', '')}",
+                "steps": steps, "build_type": build_type}
 
     dest = f"/system/etc/security/cacerts/{cert_name}"
     r = _adb(f'push "{cert_path}" "{dest}"')
@@ -121,4 +151,5 @@ def adb_install_cert(cert_path: str, cert_name: str = "mitmproxy") -> dict:
     r = _adb("reboot")
     steps.append({"step": "reboot", "result": "OK"})
 
-    return {"status": "OK", "steps": steps, "note": "Device rebooting. Wait 30s before next adb command."}
+    return {"status": "OK", "steps": steps, "build_type": build_type,
+            "note": "Device rebooting. Wait 30s before next adb command."}
