@@ -54,7 +54,26 @@ if ($UserPath -notlike "*$BinDir*") {
     $env:Path = "$env:Path;$BinDir"
 }
 
-# 5. 环境检查
+# 5. 注册 MCP Server 到 Claude Code
+$SettingsFile = "$env:USERPROFILE\.claude\settings.json"
+Write-Host "[MCP] 注册 MCP Server..." -ForegroundColor Yellow
+
+if (-not (Test-Path $SettingsFile)) {
+    @{} | ConvertTo-Json | Set-Content $SettingsFile
+}
+$Settings = Get-Content $SettingsFile -Raw | ConvertFrom-Json
+if (-not $Settings.PSObject.Properties['mcpServers']) {
+    $Settings | Add-Member -NotePropertyName 'mcpServers' -NotePropertyValue @{} -Force
+}
+$McpServers = $Settings.mcpServers
+$McpServers | Add-Member -NotePropertyName 'reverse-skills' -NotePropertyValue @{
+    command = "python"
+    args = @("$InstallDir\mcp_tools\server.py", "--mcp")
+} -Force
+$Settings | ConvertTo-Json -Depth 5 | Set-Content $SettingsFile
+Write-Host "  reverse-skills MCP server -> $SettingsFile" -ForegroundColor Cyan
+
+# 6. 环境检查
 Write-Host ""
 python preflight.py 2>$null
 if ($LASTEXITCODE -ne 0) {
