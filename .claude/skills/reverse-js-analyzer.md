@@ -7,10 +7,18 @@ description: Analyze JavaScript source to extract signature algorithm, encryptio
 
 Analyze JavaScript source files (typically from H5/WebView assets) to find and extract signature algorithms, encryption calls, and API endpoint constructions.
 
+## Role in Phase 3
+
+Execution order depends on packer — see orchestrator Phase 3 for details:
+- **NIS app:** Dynamic hook runs FIRST (3a). JS analysis (3b) is supplementary — cross-validate findings from hook output.
+- **360加固:** JS analysis is PRIMARY (only path available). All hooks skipped.
+- **No packer:** JS analysis runs first (3a), dynamic hook supplementary (3b).
+
 ## Input
 
 - One or more `.js` file paths
 - Optional: known endpoint paths (to search for URL construction near sign calls)
+- Optional: hook output from Phase 3a (cross-reference sign candidates against actual captured sign values)
 
 ## Execution
 

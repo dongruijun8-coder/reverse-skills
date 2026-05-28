@@ -14,6 +14,14 @@ Identify encryption schemes used for API request/response bodies, extract keys, 
 - Hook output (if runtime hook was successful in Phase 2)
 - Extracted keys from Phase 1 (MMKV/SP/DB)
 
+## Hook Safety (NIS / 加固 app)
+
+Before recommending hooks for crypto detection, check packer type:
+- **NIS (libnesec.so):** Safe to hook Cipher.doFinal() + Cipher.init() (system classes). NEVER enumerate, reflect, or hook okio.
+- **360 (libjiagu.so):** Skip all hooks. Use JS static analysis only.
+- Hook priority for crypto: Cipher.doFinal → Cipher.init (captures key+IV) → SecretKeySpec.<init> → Gson.toJson (serialization)
+- See `kb/patterns/anti_patterns.md` for full safety rules and `~/.claude/rules/anti-reverse-rules.md` Frida Safety Guide.
+
 ## Execution
 
 ### Step 1: Detect Encryption Presence

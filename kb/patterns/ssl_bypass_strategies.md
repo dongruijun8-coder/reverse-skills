@@ -1,5 +1,18 @@
 # SSL Bypass Decision Tree
 
+## IMPORTANT: Packer-Aware Priority
+
+Before SSL bypass, check packer type. For NIS/360 apps, environment bypass (emulator detection, root hiding) takes priority over SSL:
+
+- **NIS (libnesec.so):** 先解决模拟器检测 (Magisk DenyList + hluda) → 再处理 SSL. 否则 app 直接崩溃, SSL 策略无意义.
+- **360 (libjiagu.so):** 跳过所有 Runtime Hook SSL 策略. 仅尝试 system cert → iptables → Chrome DevTools.
+- **无加固:** 按标准链进行.
+
+## Certificate Installation Note
+
+- **userdebug/eng build:** `adb_install_cert` → push to `/system/etc/security/cacerts/` directly
+- **production build (user):** 需要 MoveCertificate 模块 (Magisk) 将用户 CA 移动到系统信任区. Skill 默认假设有此模块.
+
 ## Strategy Chain (try in order, stop on first success)
 
 ### 1. System HTTP Proxy

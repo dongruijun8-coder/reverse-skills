@@ -52,23 +52,39 @@ def apk_detect_packer(unpacked_dir: str) -> dict:
 
     evidence = []
     packer = "none"
+    extra_flags = []
 
-    # Check in order of specificity
+    # Check in order of specificity (strongest/most specific first)
     if any('libjiagu' in f for f in so_files):
         packer = "360加固"
         evidence = [f for f in so_files if 'libjiagu' in f]
+    elif any('libnesec' in f for f in so_files):
+        packer = "网易易盾"
+        evidence = [f for f in so_files if 'libnesec' in f]
     elif any('libshella' in f for f in so_files):
         packer = "Tencent Legu"
         evidence = [f for f in so_files if 'libshella' in f or 'libtup' in f]
+    elif any('libDexHelper' in f for f in so_files):
+        packer = "梆梆加固"
+        evidence = [f for f in so_files if 'libDexHelper' in f]
     elif any('libexec' in f for f in so_files):
         packer = "爱加密"
         evidence = [f for f in so_files if 'libexec' in f]
+    elif any('libijmdata' in f for f in so_files):
+        packer = "爱加密(legacy)"
+        evidence = [f for f in so_files if 'libijmdata' in f]
+
+    # Check for emulator detector (separate from packer — can coexist)
+    emu_detect = [f for f in so_files if 'libemulatordetector' in f]
+    if emu_detect:
+        extra_flags.append("emulator_detection")
 
     return {
         "packer": packer,
         "evidence": evidence,
         "confidence": 90 if evidence else 50,
-        "total_so_files": len(so_files)
+        "total_so_files": len(so_files),
+        "flags": extra_flags if extra_flags else None,
     }
 
 
