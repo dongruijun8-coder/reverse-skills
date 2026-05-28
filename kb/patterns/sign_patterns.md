@@ -41,7 +41,23 @@ def compute_sign(data, key):
 **Detection:** Find sign function → check if its input is another sign function call
 **Strategy:** Decompose from outer to inner, verify each layer independently with `crypto_sign_verify`
 
-## Pattern 5: Native (JS Bridge) Sign
+## Pattern 5: XOR Pair (p1 XOR p2)
+
+**JS/Native Signature:** `param1 XOR param2 = plaintext` (custom obfuscation, not a hash)
+**Confidence clues:** Two paired encoded fields (weight +25), same-length Base64 strings (weight +20), XOR result is readable (weight +35)
+**Key characteristics:** Neither field alone is meaningful. XOR produces key=value pairs or JSON. Often combined with Base64 encoding on both inputs.
+**Detection:** Request has p1+p2 (or param1+param2, enc1+enc2) fields → both Base64 → decode → XOR → plaintext appears
+**Python equivalent:**
+```python
+def xor_decode(p1_b64, p2_b64):
+    b1 = base64.b64decode(p1_b64)
+    b2 = base64.b64decode(p2_b64)
+    result = bytes(a ^ b for a, b in zip(b1, b2))
+    return result.decode('utf-8')
+```
+**Cases:** 双鱼部落 2026-05 (p1 XOR p2 = plaintext params, custom NetEase decryption)
+
+## Pattern 6: Native (JS Bridge) Sign
 **JS Signature:** `window.androidJsObj.sign(params)` or bridge call
 **Characteristics:** JS delegates sign to native Java/Kotlin code via WebView bridge
 **Detection:** Search for `androidJsObj.`, `webkit.messageHandlers.`, `jsBridge.` calls with "sign" or "encrypt" in name

@@ -8,7 +8,7 @@
 
 基于 Claude Code 的自主逆向工程 Agent。输入一个 APK，自动完成抓包→签名破解→加密识别→认证打通→生成可执行插件。
 
-**5 个 Skill + 28 个 MCP 工具 + 8 个知识库模式 + 自进化反馈机制。**
+**5 个 Skill + 41 个 MCP 工具 + 12 个知识库模式 + 自进化反馈机制 + 断点恢复。**
 
 ## 一条命令安装
 
@@ -48,12 +48,15 @@ Agent 自动执行:
 
 ```
 reverse-skills/
-├── CLAUDE.md                 Agent 行为准则（Claude Code 自动加载）
+├── .claude/skills/           5 个逆向 Skill（Claude Code 自动发现）
 ├── .claude/rules/            规则文件（自动生效）
-├── skills/                   5 个逆向 Skill
 ├── kb/                       知识库（模式 + 案例 + 提案）
-├── mcp_tools/                28 个 MCP 工具
-└── tests/                    自测用例
+│   ├── patterns/             12 个模式库 + 8 个 Frida 模板
+│   ├── case_library/         自动累积案例
+│   └── _proposals/           自进化提案
+├── mcp_tools/                41 个 MCP 工具（8 类）
+├── smoke_test.py             Phase 5 冒烟测试
+└── preflight.py              前置依赖检查
 ```
 
 ## 前置依赖

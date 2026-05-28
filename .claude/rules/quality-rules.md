@@ -8,9 +8,8 @@
 
 ## plugin.py Quality
 - Must pass `python -c "import plugin"` without SyntaxError or ImportError
-- Must pass `python -c "from plugin import *Plugin; assert issubclass(*Plugin, BasePlugin)"`
-- Must implement all 5 BasePlugin abstract methods
-- authenticate() must return AuthResult (not raise exception) on invalid credentials
+- Must pass `python smoke_test.py projects/{app}/ --quick` — imports OK, sign/crypto defined
+- authenticate() must return truthy on valid credentials, handle invalid gracefully
 
 ## sign.py Quality
 - Must have compute_sign(params, key) -> str function

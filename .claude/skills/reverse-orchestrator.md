@@ -172,19 +172,19 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
    - Enable Magisk DenyList → add target app package
    - Install MagiskHide Props Config module if needed
    - Reboot device → verify Magisk status
-3. IF taget packer requires Magisk/hluda → call `adb_health_check(package=package, check_frida=True, check_magisk=True)`
+3. IF target packer requires Magisk/hluda → call `adb_health_check(package=package, check_frida=True, check_magisk=True)`
    IF degraded → call `adb_reconnect()` → retry health check
 4. Determine Frida server type based on packer:
    - NIS (libnesec.so) → push hluda-server ONLY (NOT frida-server). `adb push hluda-server /data/local/tmp/`
    - 360 (libjiagu.so) → skip all frida prep, mark hooks_disabled
    - Other / none → push frida-server: `adb push frida-server /data/local/tmp/`
-4. Start Frida server (if not skipped):
+5. Start Frida server (if not skipped):
    - `adb shell "su -c 'chmod 755 /data/local/tmp/hluda-server && /data/local/tmp/hluda-server -D &'"`  (NIS)
    - OR `adb shell "su -c '/data/local/tmp/frida-server -D &'"`  (normal)
-5. Install CA certificate:
+6. Install CA certificate:
    - IF userdebug/eng build → `adb_install_cert(cert_path)` push to system CA store
    - IF production build → use MoveCertificate module (Magisk) to move user CA to system
-6. Verify environment:
+7. Verify environment:
    - `adb shell "su -c 'ls /data/local/tmp/hluda-server'"` → exists
    - `adb shell "ps | grep hluda"` → running
    - `adb shell "settings list global | grep http_proxy"` → not set yet (Phase 2)

@@ -53,11 +53,31 @@ def rc4_crypt(data, key):
 ## Pattern 4: RSA Public Key Encryption
 **JS Signature:** `JSEncrypt.encrypt(data)` or `forge.pki` or `window.androidJsObj.rsaEncrypt(data)`
 **Java Signature:** `Cipher.getInstance("RSA/ECB/PKCS1Padding")`
-**Detectio**Key characteristics:** 1024/2048-bit key, public key for encrypt (client → server), private key on server
+**Key characteristics:** 1024/2048-bit key, public key for encrypt (client → server), private key on server
 **Detection:** Long base64 public key strings, "RSA" or "PKCS1" in cipher initialization
 **Strategy:** Extract public key from JS/Java → use for verification, not for decryption (server holds private key)
 
-## Pattern 5: Double-Layer Encryption
+## Pattern 5: AES-GCM
+
+**JS Signature:** `CryptoJS.AES.encrypt(data, key, {mode: CryptoJS.mode.GCM, iv: nonce})` (rare in JS, more common in native/Java)
+**Java Signature:** `Cipher.getInstance("AES/GCM/NoPadding")`
+**Confidence clues:** GCM mode (weight +30), 12-byte nonce (weight +25), no padding in code (weight +20), 16-byte trailing auth tag (weight +15)
+**Key characteristics:** No padding (GCM is stream cipher mode). Ciphertext is exactly same length as plaintext. Last 16 bytes of output = authentication tag.
+**Detection:** Cipher.getInstance with "GCM" → check IV/nonce length (usually 12) → check for tag handling
+**Python equivalent:**
+```python
+from Crypto.Cipher import AES
+
+def decrypt_gcm(encrypted_b64, key, nonce):
+    raw = base64.b64decode(encrypted_b64)
+    ct_bytes = raw[:-16]  # ciphertext
+    tag = raw[-16:]       # auth tag
+    cipher = AES.new(key.encode(), AES.MODE_GCM, nonce=nonce.encode())
+    return json.loads(cipher.decrypt_and_verify(ct_bytes, tag).decode())
+```
+**Cases:** 双鱼部落 2026-05 (AES-256-CBC detected via Frida Cipher.init hook)
+
+## Pattern 6: Double-Layer Encryption
 **JS/API Signature:** Outer body AES-encrypted + inner data field also AES-encrypted, OR pub_enc header triggers body encryption
 **Detection:** Response has `pub_enc: true` header AND `data` field is base64 (not plain JSON)
 **Strategy:** Decrypt outer layer first → check if inner data is still encrypted → decrypt inner layer
