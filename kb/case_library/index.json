@@ -23,6 +23,30 @@
         "h5_fallback_used": true,
         "sign_verified": true,
         "total_api_calls_made": 8
+      },
+      "reusable": {
+        "sign_algorithm": "MD5(sorted_params + '&key=' + sign_key).upper()",
+        "sign_initial_key": "",
+        "sign_key_source": "API /login/h5/sign/token (AES-ECB decrypted)",
+        "sign_excluded_params": ["pub_sign", "pub_uid", "pub_ticket", "pub_sid", "pub_timestamp", "deviceId"],
+        "crypto_algorithm": "AES-128-ECB",
+        "crypto_known_key": null,
+        "crypto_key_source": "MMKV (field: encrypt_key)",
+        "auth_pattern": "ticket_session",
+        "auth_chain": [
+          {"step": 1, "action": "extract ticket from share_data.xml (Java serial)"},
+          {"step": 2, "action": "GET /app/key with sign_key='' (initial)"},
+          {"step": 3, "action": "GET /login/h5/sign/token (no sign)"},
+          {"step": 4, "action": "AES-ECB decrypt response → extract sign_key"},
+          {"step": 5, "action": "verify with GET /allrank/listV2 using active sign_key"}
+        ],
+        "credential_sources": {
+          "uid": "share_data.xml",
+          "ticket": "share_data.xml",
+          "deviceId": "SharedPreferences"
+        },
+        "hook_strategy": "skipped (360加固)",
+        "notes": "360加固 — 所有Runtime Hook跳过。H5 JS静态分析 + 抓包推断。"
       }
     },
     {
@@ -48,6 +72,77 @@
         "h5_fallback_used": false,
         "sign_verified": null,
         "total_api_calls_made": 3
+      },
+      "reusable": {
+        "sign_algorithm": "none",
+        "sign_initial_key": null,
+        "sign_key_source": null,
+        "sign_excluded_params": [],
+        "crypto_algorithm": "none",
+        "crypto_known_key": null,
+        "crypto_key_source": null,
+        "auth_pattern": "token_chain",
+        "auth_chain": [
+          {"step": 1, "action": "POST /sms with {phone, app, build}"},
+          {"step": 2, "action": "POST /login with {phone, smsCode}"},
+          {"step": 3, "action": "extract token from response.data.token"},
+          {"step": 4, "action": "all requests carry token in body"}
+        ],
+        "credential_sources": {
+          "token": "API response /login"
+        },
+        "hook_strategy": "none needed (no packer, no encryption)",
+        "notes": "无加固、无签名、无加密。最简单模式。直接抓包→生成api_spec.json。"
+      }
+    },
+    {
+      "id": "nis_app_2026-05",
+      "app": "本次实战App",
+      "package": "(NIS protected)",
+      "date": "2026-05-28",
+      "duration_hours": 4,
+      "result": "success",
+      "tags": {
+        "category": "泛娱乐",
+        "packer": "网易易盾",
+        "sign": "XOR_p1p2",
+        "crypto": ["AES-256-CBC"],
+        "auth": "multi_channel",
+        "ssl_bypass": "system_cert"
+      },
+      "similarity_keys": ["libnesec.so", "hluda", "XOR", "AES-256", "CBC", "Gson", "HttpClientImp", "createCall", "Body.getData"],
+      "stats": {
+        "endpoints_found": 28,
+        "frida_attempts": 18,
+        "frida_success": true,
+        "h5_fallback_used": false,
+        "sign_verified": true,
+        "total_api_calls_made": 21
+      },
+      "reusable": {
+        "sign_algorithm": "XOR(p1, p2) — custom encryption on request params",
+        "sign_initial_key": null,
+        "sign_key_source": null,
+        "sign_excluded_params": [],
+        "crypto_algorithm": "AES-256-CBC",
+        "crypto_known_key": null,
+        "crypto_key_source": "Frida Cipher.init hook",
+        "auth_pattern": "multi_channel",
+        "auth_chain": [
+          {"step": 1, "action": "login with plaintext password (HTTP)"},
+          {"step": 2, "action": "extract token from login response"},
+          {"step": 3, "action": "connect RongCloud IM with token"},
+          {"step": 4, "action": "connect MQTT with device credentials"},
+          {"step": 5, "action": "connect TencentIM with signed credentials"}
+        ],
+        "credential_sources": {
+          "password": "user input (plaintext in login request)",
+          "token": "API response /login",
+          "im_token": "API response /login"
+        },
+        "hook_strategy": "hluda attach → T1(Headers) → T7(newCall) → T3(createCall) → T2(Body.getData) → T4+T5(Cipher)",
+        "hook_templates_used": ["T1", "T7", "T3", "T2", "T4", "T5"],
+        "notes": "NIS加固 — 18版Frida脚本迭代。hluda是关键突破点。应用层→加密层策略。禁止类枚举/反射/Java.cast。"
       }
     }
   ]

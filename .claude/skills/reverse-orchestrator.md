@@ -136,10 +136,24 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 6. Call `apk_string_search(unpacked_dir, patterns=[URL_REGEX, KEY_REGEX, IP_REGEX])` → get domain/key candidates
 7. IF packer == "none": call `apk_decompile(apk_path, output_dir)` → search for API classes
 8. IF packer != "none": mark decompile_skipped=true, list assets/ directory for H5/JS files
-9. Read `~/.claude/reverse-skills/kb/case_library/index.json` → search for similar cases by tags
-10. Save state, output summary
+9. Read `~/.claude/reverse-skills/kb/case_library/index.json` → search for similar cases:
+   - Match by `similarity_keys` (packer .so name, sign keywords, crypto keywords)
+   - Match by `tags.packer` (same packer → same bypass strategy)
+   - Match by `tags.category` (same app type → similar API structure)
+10. **Apply matched case data as working hypotheses** (NOT just a reference):
+   - IF `reusable.sign_algorithm` exists → pre-load as primary sign candidate
+   - IF `reusable.sign_initial_key` exists → set as default sign_key
+   - IF `reusable.sign_excluded_params` exists → use as initial exclusion list
+   - IF `reusable.crypto_algorithm` exists → pre-load as primary crypto candidate
+   - IF `reusable.crypto_key_source` exists → prioritize that source in Phase 1 extraction
+   - IF `reusable.auth_pattern` exists → pre-select auth flow pattern for Phase 4
+   - IF `reusable.auth_chain` exists → use as auth execution plan
+   - IF `reusable.credential_sources` exists → prioritize those files in Phase 1
+   - IF `reusable.hook_templates_used` exists → generate those templates first in Phase 3
+   - Store all pre-loaded hypotheses in `workflow.json` under `matched_case_hypotheses`
+11. Save state, output summary with matched case hypotheses
 
-**Output:** packer type, strategy decisions, domain candidates, key candidates, matched cases
+**Output:** packer type, strategy decisions, domain candidates, key candidates, matched cases with pre-loaded hypotheses
 
 ### Phase 0.5: Environment Preparation [NEW]
 
@@ -316,12 +330,18 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 1. IF sign/crypto detected: generate plugin.py (Plugin mode) using Jinja2 template
 2. IF no sign/crypto: generate api_spec.json only (Spec mode)
 3. Call `toolkit_scaffold(spec_path, output_dir)` → generate plugin.py + models.py
-4. Run smoke tests (5 quality gates):
-   a. `python -c "import plugin"` — Importability
-   b. `crypto_sign_verify()` — Sign correctness
-   c. `crypto_aes(decrypt, ...)` — Decrypt correctness
-   d. `plugin.authenticate(credentials)` — Auth works
-   e. `plugin.fetch_rooms({})` — Returns > 0 rooms
+4. Run smoke tests via the automated runner:
+   ```
+   python smoke_test.py projects/{app_name}/
+   ```
+   This validates all 5 quality gates:
+   a. Importability — `plugin.py` imports without error
+   b. Sign — `compute_sign()` is callable and has docstring
+   c. Crypto — `decrypt_body()` / `encrypt_body()` are defined
+   d. Auth — `authenticate(credentials)` returns truthy (needs credentials.json)
+   e. Fetch — data endpoint returns > 0 items (needs valid auth)
+   
+   Tip: `python smoke_test.py projects/{app}/ --quick` to skip network tests.
 5. IF any smoke test fails → feedback loop to corresponding phase
 6. Generate audit.jsonl summary
 7. **Auto-generate case library entry** (from workflow.json + state):

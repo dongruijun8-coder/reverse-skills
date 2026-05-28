@@ -73,6 +73,37 @@ GSON_TARGETS = [
     ("com.google.gson.Gson", "toJson", ["obj"]),
 ]
 
+# ── Named templates from kb/patterns/frida_hook_templates.md ────────
+
+TEMPLATE_TARGETS = {
+    "t1": [("okhttp3.Request$Builder", "header", ["name", "value"]),
+           ("okhttp3.Request$Builder", "addHeader", ["name", "value"])],
+    "t2": [("okhttp3.ResponseBody", "getData", [])],
+    "t3": [],  # Implementation class varies — agent must provide target_classes
+    "t4": [("javax.crypto.Cipher", "doFinal", ["input"])],
+    "t5": [("javax.crypto.Cipher", "init", ["opmode", "key", "params"]),
+           ("javax.crypto.Cipher", "init", ["opmode", "key"])],
+    "t6": [("com.google.gson.Gson", "toJson", ["obj"])],
+    "t7": [("okhttp3.OkHttpClient", "newCall", ["request"])],
+    "t8": [("javax.crypto.spec.SecretKeySpec", "$init", ["key", "algorithm"])],
+}
+
+TEMPLATE_DESCRIPTIONS = {
+    "t1": "Request Headers Capture — hook okhttp3.Request$Builder.header/addHeader. NIS-safe. Always try first.",
+    "t2": "Response Body Capture — hook ResponseBody.getData(). Minimal single hook, NIS-safe.",
+    "t3": "Request Params — hook implementation class createCall(). MUST provide target_classes (varies per app).",
+    "t4": "Cipher.doFinal — algorithm detection. System class hook, safe for all packers.",
+    "t5": "Cipher.init — Key+IV capture. System class hook, safe for all packers. Critical for Phase 3.",
+    "t6": "Gson.toJson — serialization format. UNSTABLE on NIS. Use selectively.",
+    "t7": "OkHttpClient.newCall — traffic indicator. Safest hook. Do this first to confirm Frida is alive.",
+    "t8": "SecretKeySpec — key material at construction time. Backup if Cipher.init doesn't fire.",
+}
+
+TEMPLATE_SAFETY = {
+    "t1": "Safe", "t2": "Safe", "t3": "Safe", "t4": "Safe",
+    "t5": "Safe", "t6": "Unstable", "t7": "Safe", "t8": "Safe",
+}
+
 
 # ── Preset safety notes ────────────────────────────────────────────
 
@@ -97,14 +128,17 @@ STRATEGY_NOTES = {
 
 def hook_gen_frida(target_classes: list[str] | None = None,
                    script_type: str = "crypto",
+                   template: str | None = None,
                    package: str = "",
                    output_dir: str | None = None) -> dict:
     """Generate a Frida JavaScript hook script with version tracking.
 
     Args:
         target_classes: List of "com.example.ClassName.method" strings.
-                        If None, uses defaults based on script_type preset.
-        script_type: Preset — "crypto", "ssl", "app_layer", "gson", or "full".
+                        If None, uses defaults based on script_type or template.
+        script_type: Preset — "crypto", "ssl", "app_layer", "gson", "full", or "template".
+        template: Named template T1-T8 from kb/patterns/frida_hook_templates.md.
+                  Overrides script_type when set.
         package: Target app package name (for version tracking directory).
         output_dir: Directory to save script. Auto-creates subdir if package provided.
     """
@@ -116,6 +150,19 @@ def hook_gen_frida(target_classes: list[str] | None = None,
                 targets.append((parts[0], parts[1], []))
             else:
                 targets.append((tc, "*", []))
+    elif template and template.lower() in TEMPLATE_TARGETS:
+        targets = TEMPLATE_TARGETS[template.lower()]
+        template_name = template.lower()
+        # T3 requires custom target_classes — warn if empty
+        if template_name == "t3" and not targets:
+            return {
+                "status": "ERROR",
+                "error": "Template T3 requires target_classes. "
+                         "The HttpClientImp class name varies per app. "
+                         "Provide target_classes=['com.example.http.HttpClientImp.createCall'] "
+                         "after finding the implementation class.",
+                "hint": "Search APK strings for 'createCall' or 'HttpClient' to find the class name.",
+            }
     elif script_type == "ssl":
         targets = SSL_UNPIN_TARGETS
     elif script_type == "app_layer":
@@ -126,6 +173,10 @@ def hook_gen_frida(target_classes: list[str] | None = None,
         targets = CRYPTO_TARGETS + APP_LAYER_TARGETS + GSON_TARGETS
     else:
         targets = CRYPTO_TARGETS
+        template_name = None
+
+    # Resolve template_name for output metadata
+    resolved_template = template_name if template_name else None
 
     # Build hook code
     hooks_code = []
@@ -168,44 +219,57 @@ def hook_gen_frida(target_classes: list[str] | None = None,
 
     # Version tracking: auto-increment version in output dir
     version = 1
+    prefix = resolved_template if resolved_template else script_type
     if output_dir and package:
         hook_dir = Path(output_dir) / "hooks"
         hook_dir.mkdir(parents=True, exist_ok=True)
-        existing = sorted(hook_dir.glob(f"{script_type}_v*.js"))
+        existing = sorted(hook_dir.glob(f"{prefix}_v*.js"))
         if existing:
             last = existing[-1].stem
             m = re.search(r'v(\d+)$', last)
             if m:
                 version = int(m.group(1)) + 1
-        output_path = str(hook_dir / f"{script_type}_v{version}.js")
+        output_path = str(hook_dir / f"{prefix}_v{version}.js")
     elif output_dir:
-        output_path = str(Path(output_dir) / f"hook_{script_type}.js")
+        output_path = str(Path(output_dir) / f"hook_{prefix}.js")
     else:
         output_path = None
 
+    safety = TEMPLATE_SAFETY.get(resolved_template, "") if resolved_template else SAFETY_NOTES.get(script_type, "")
+    strategy = f"template-{resolved_template}" if resolved_template else STRATEGY_NOTES.get(script_type, "custom")
+
     script = FRIDA_HOOK_TEMPLATE.format(
         version=f"v{version}",
-        preset=script_type,
+        preset=resolved_template or script_type,
         package=package or "unknown",
-        strategy=STRATEGY_NOTES.get(script_type, "custom"),
-        safety_notes=SAFETY_NOTES.get(script_type, ""),
+        strategy=f"strategy: {strategy}",
+        safety_notes=f"Safety: {safety}",
         hooks='\n'.join(hooks_code)
     )
 
     if output_path:
         Path(output_path).write_text(script, encoding='utf-8')
-        return {
+        result = {
             "status": "OK",
             "output_path": output_path,
             "version": version,
-            "preset": script_type,
+            "preset": resolved_template or script_type,
             "target_count": len(targets),
             "targets": [f"{c}.{m}" for c, m, _ in targets],
-            "safety": SAFETY_NOTES.get(script_type, ""),
+            "safety": safety,
         }
+        if resolved_template:
+            result["template"] = resolved_template
+            result["template_library"] = "kb/patterns/frida_hook_templates.md"
+            result["description"] = TEMPLATE_DESCRIPTIONS.get(resolved_template, "")
+        return result
 
-    return {"status": "OK", "script": script, "version": version,
-            "preset": script_type, "target_count": len(targets)}
+    result = {"status": "OK", "script": script, "version": version,
+              "preset": resolved_template or script_type, "target_count": len(targets)}
+    if resolved_template:
+        result["template"] = resolved_template
+        result["template_library"] = "kb/patterns/frida_hook_templates.md"
+    return result
 
 
 def hook_run(method: str, script_path: str, package: str,
