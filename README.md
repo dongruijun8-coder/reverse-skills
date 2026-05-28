@@ -1,4 +1,4 @@
-# Reverse Engineering Agent
+# Reverse Skills
 
 > 一条命令安装，自动逆向任意移动 App 的 HTTP API
 
@@ -6,7 +6,7 @@
 
 ## 这是什么
 
-基于 Claude Code 的自主逆向工程 Agent。输入一个 APK，自动完成抓包→签名破解→加密识别→认证打通→生成可执行插件。
+基于 Claude Code 的逆向工程 Skill 套件。输入一个 APK，Claude 自动完成抓包→签名破解→加密识别→认证打通→生成可执行插件。
 
 **5 个 Skill + 41 个 MCP 工具 + 12 个知识库模式 + 自进化反馈机制 + 断点恢复。**
 
