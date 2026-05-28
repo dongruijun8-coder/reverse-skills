@@ -41,7 +41,7 @@ reverse adb_device_info
 reverse crypto_sign_verify '{"sign_code": "...", "params": {...}, "expected": "ABC", "key": ""}'
 ```
 
-28 个工具名: `reverse list` 查看全部。
+41 个工具名: `reverse list` 查看全部。
 - adb 操作前必须确认设备已连接 (adb_device_info)
 - mitmproxy 端口不能冲突, 启动前检查 8080 端口
 - 每个工具调用后检查返回值, 不假设成功
@@ -130,7 +130,7 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 
 ### Phase 0: APK Static Analysis
 
-**Goal:** Unpack APK, detect packer, extract metadata, find domain candidates
+**Goal:** Unpack APK, detect packer, extract metadata, find domain candidates, detect device fingerprint and third-party IM SDKs
 
 **Steps:**
 1. Call `apk_unpack(apk_path, output_dir)` → get file tree
@@ -139,13 +139,23 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 4. Read `~/.claude/reverse-skills/kb/patterns/anti_patterns.md` → skip doomed strategies
 5. Call `apk_extract_manifest(unpacked_dir)` → get package, version, permissions, network_config
 6. Call `apk_string_search(unpacked_dir, patterns=[URL_REGEX, KEY_REGEX, IP_REGEX])` → get domain/key candidates
-7. IF packer == "none": call `apk_decompile(apk_path, output_dir)` → search for API classes
-8. IF packer != "none": mark decompile_skipped=true, list assets/ directory for H5/JS files
-9. Call `pipeline_match_case(packer, sign_keywords, category, package)` → auto-match against case library:
-   - Match by `similarity_keys` (packer .so name, sign keywords, crypto keywords)
-   - Match by `tags.packer` (same packer → same bypass strategy)
-   - Match by `tags.category` (same app type → similar API structure)
-10. **Apply matched case data as working hypotheses** (NOT just a reference):
+7. **Detect device fingerprint SDKs (NEW):** Check for:
+   - `libsmsdk.so` → 数美 (Shumei/Fengkong) → `smdeviceid` header
+   - `libne.so` or `libnesec.so` → 网易 device token → `devicetoken` header
+   - `libtrustdevice.so` → TrustDevice fingerprint
+   - Mark `session_bound_key_likely = true` if any detected (triggers cold start capture in Phase 2)
+8. **Detect third-party IM SDKs (NEW):** Check for:
+   - `libRongIMLib.so` → 融云 IM → private messaging via TCP (not HTTP)
+   - `libImSDK.so` → TencentIM → real-time messaging
+   - `libhyphenate*.so` → 环信 IM
+   - Mark affected endpoints as "external protocol" — do not attempt HTTP implementation
+9. IF packer == "none": call `apk_decompile(apk_path, output_dir)` → search for API classes
+10. IF packer != "none": mark decompile_skipped=true, list assets/ directory for H5/JS files
+11. Call `pipeline_match_case(packer, sign_keywords, category, package)` → auto-match against case library:
+    - Match by `similarity_keys` (packer .so name, sign keywords, crypto keywords)
+    - Match by `tags.packer` (same packer → same bypass strategy)
+    - Match by `tags.category` (same app type → similar API structure)
+12. **Apply matched case data as working hypotheses** (NOT just a reference):
    - IF `reusable.sign_algorithm` exists → pre-load as primary sign candidate
    - IF `reusable.sign_initial_key` exists → set as default sign_key
    - IF `reusable.sign_excluded_params` exists → use as initial exclusion list
@@ -156,9 +166,9 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
    - IF `reusable.credential_sources` exists → prioritize those files in Phase 1
    - IF `reusable.hook_templates_used` exists → generate those templates first in Phase 3
    - Store all pre-loaded hypotheses in `workflow.json` under `matched_case_hypotheses`
-11. Save state, output summary with matched case hypotheses
+13. Save state, output summary with matched case hypotheses
 
-**Output:** packer type, strategy decisions, domain candidates, key candidates, matched cases with pre-loaded hypotheses
+**Output:** packer type, strategy decisions, domain candidates, key candidates, device fingerprint SDKs detected, third-party IM SDKs detected, session_bound_key_likely flag, matched cases with pre-loaded hypotheses
 
 ### Phase 0.5: Environment Preparation [NEW]
 
@@ -226,14 +236,26 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 
 ### Phase 2: Traffic Capture + SSL Bypass
 
-**Goal:** Capture HTTP traffic, bypass SSL pinning if needed
+**Goal:** Capture HTTP traffic, bypass SSL pinning if needed. CRITICAL: capture BOTH cold start (App/init, device registration) AND warm (logged-in) traffic.
 
 **Steps:**
 1. IF packer == "360": skip ALL hook strategies (anti_patterns.md)
 2. Call `proxy_start(port=8080, output_dir=...)` → start mitmproxy
 3. Call `adb_shell("settings put global http_proxy ...")` → set system proxy
-4. Launch app, wait 60s for init, call `proxy_list_flows()` → check for initial traffic
-5. **UI 遍历提示:** 生成操作清单，提示用户在模拟器上手动点击各个页面，触发更多 API 请求：
+
+**2a. Cold Start Capture (NEW — critical for session-bound key apps):**
+4. Clear app data to force cold start: `adb shell "su -c 'pm clear {package}'"`
+5. Launch app fresh, wait 90s for full init (App/init → device registration → session establishment)
+6. Call `proxy_list_flows()` → look for these CRITICAL endpoints:
+   - `App/init` or `device/register` or `init` → device registration (captures devicetoken, clientsession)
+   - First encrypted request → captures initial key exchange
+   - Any endpoint returning `sessionId`, `token`, `deviceId` in response
+7. IF no traffic during cold start → app may use non-proxy network (custom TCP, MQTT, or cert pinning)
+   → Skip to SSL bypass strategies (step 8)
+
+**2b. Warm / UI Traversal Capture:**
+8. Launch app (if not already running), wait 60s, call `proxy_list_flows()` → check for initial traffic
+9. **UI 遍历提示:** 生成操作清单，提示用户在模拟器上手动点击各个页面，触发更多 API 请求：
    - 根据 AndroidManifest 的 Activity 列表 + 常见泛娱乐 app 模式，生成结构化操作清单
    - 每完成一项提示用户回车确认，或一次性列出全部让用户自行遍历
    - 清单模板（按 app 类型调整）：
@@ -248,12 +270,17 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
      □ 充值/钱包页 — 进入（不实际支付）
      ```
    - 用户确认全部完成后继续下一步
-6. Call `proxy_list_flows()` → 统计新增流量，确认覆盖了预期端点
-7. IF no traffic: follow `~/.claude/reverse-skills/kb/patterns/ssl_bypass_strategies.md` decision tree
-8. Run hook track in parallel (if not skipped): hook_gen_frida → hook_run → collect keys
-9. Call `proxy_stop()` → export .mitm file
-10. Log all strategies attempted + results to strategy_stack
-11. IF all strategies exhausted: L3 path abandonment → continue with H5-only analysis
+10. Call `proxy_list_flows()` → 统计新增流量，确认覆盖了预期端点
+11. **Analyze cold start flows separately:** For flows from step 2a:
+    - Extract `devicetoken` format (e.g. `v3:AAAAA...`) → note length, prefix, encoding
+    - Extract `clientsession` → note format (UUID? hex? custom?)
+    - Extract `smdeviceid` if present → third-party device fingerprint (数美/NetEngine)
+    - Save all cold start headers to `project/{app}/cold_start_headers.json`
+12. IF no traffic: follow `~/.claude/reverse-skills/kb/patterns/ssl_bypass_strategies.md` decision tree
+13. Run hook track in parallel (if not skipped): hook_gen_frida → hook_run → collect keys
+14. Call `proxy_stop()` → export .mitm file
+15. Log all strategies attempted + results to strategy_stack
+16. IF all strategies exhausted: L3 path abandonment → continue with H5-only analysis
 
 ### Phase 3: Algorithm Reverse Engineering
 
@@ -305,10 +332,24 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 
 **Steps — Common (3c):**
 
-4. For each sign candidate with confidence ≥ threshold: generate sign.py → `crypto_sign_verify()`
-5. For each crypto candidate: `crypto_aes/crypto_rc4/crypto_rsa()` → verify decryption
-6. IF sign_verify fails: loop back, search for more evidence (from other path)
-7. IF key source unknown: search MMKV → SP → DB → API responses → ask user
+4. **Check for key derivation (NEW):** IF key found via Cipher.init hook but key NOT found in MMKV/SP/DB/JS:
+   - Key is likely DERIVED per-session, not static
+   - Read `kb/patterns/crypto_patterns.md` Pattern 7 (Key Derivation)
+   - Analyze cold start headers (`cold_start_headers.json`) for derivation inputs:
+     - `devicetoken` → likely input to key derivation
+     - `clientsession` → may be the key itself or derivation input
+     - `smdeviceid` → third-party fingerprint, may participate in derivation
+   - Hook the derivation function: target `SecretKeySpec.<init>()` + stack trace to find caller
+   - IF derivation is native (.so) → mark native_key_derivation=true → try to reverse or use captured session key
+5. **Check for post-login parameter state changes (NEW):** IF app has XOR pair (p1/p2/p3):
+   - Compare pre-login vs post-login p1/p2/p3 values from captured flows
+   - p1 may transition from random → fixed (token-derived)
+   - p2 may transition from XOR nonce → request signature
+   - Hook post-login request to capture new p1/p2 generation logic
+6. For each sign candidate with confidence ≥ threshold: generate sign.py → `crypto_sign_verify()`
+7. For each crypto candidate: `crypto_aes/crypto_rc4/crypto_rsa()` → verify decryption
+8. IF sign_verify fails: loop back, search for more evidence (from other path)
+9. IF key source unknown: check cold_start_headers → check SecretKeySpec stack trace → check native .so exports → ask user
 
 **NIS Hook Iteration Safety Protocol:**
 - Each hook version: ONE change at a time
@@ -319,17 +360,24 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 
 ### Phase 4: Auth Chain + Verification
 
-**Goal:** Orchestrate authentication flow and verify everything works
+**Goal:** Orchestrate authentication flow and verify everything works. For session-bound apps, first establish device session (App/init), then authenticate.
 
 **Steps:**
 1. Invoke `/reverse-auth-flow-composer` skill
 2. Match auth flow pattern from `~/.claude/reverse-skills/kb/patterns/auth_flow_patterns.md`
-3. Execute auth chain step by step
-4. Verify final authenticated request returns real data
-5. IF 403 → loop back to Phase 3 (sign error)
-6. IF 401 → loop back to Phase 1 (re-extract credentials)
-7. IF 400 → compare with captured requests, fix params
-8. Log auth result
+3. **IF device-bound session detected (NEW):** App uses session-bound keys (devicetoken → key derivation)
+   a. First establish device session: replay `App/init` with generated/borrowed devicetoken
+   b. IF App/init returns sessionId/token → store as clientsession
+   c. THEN execute normal auth chain (login → get token)
+   d. IF App/init fails with 120001 → devicetoken rejected → need to reverse devicetoken generation
+      → Pause L4: "devicetoken generation unknown, need to re-run app with Frida hook on device ID generation"
+4. Execute auth chain step by step
+5. Verify final authenticated request returns real data
+6. IF 403 → loop back to Phase 3 (sign error)
+7. IF 401 → loop back to Phase 1 (re-extract credentials)
+8. IF 400 → compare with captured requests, fix params
+9. IF 120001 → session key mismatch → re-derive key or re-extract from new session
+10. Log auth result
 
 ### Phase 5: Generate Artifacts + Smoke Test
 

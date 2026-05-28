@@ -52,7 +52,41 @@ IF packer != "none":
   Skip decompilation. Mark `decompile_skipped = true`.
   List `assets/` directory. Note any `.js` or `.html` files → these are H5 analysis targets.
 
-### Step 7: Case Matching
+### Step 7: Detect Device Fingerprint SDKs
+
+Check for third-party device fingerprint SDKs (separate from packer detection):
+
+**数美 (Shumei/Fengkong):**
+- `libsmsdk.so` in lib/ directory
+- `com.fengkong` or `com.shumei` in AndroidManifest
+- Generates: `smdeviceid` header (Base64 device fingerprint)
+
+**网易 Device Token:**
+- `libne.so` (standalone) or `libnesec.so` (NIS packer)
+- Generates: `devicetoken` header (v3:AAAAA... format, 600+ chars)
+- Critical for NIS session-bound key derivation
+
+**TrustDevice:**
+- `libtrustdevice.so` in lib/ directory
+- Third-party device fingerprint solution
+
+### Step 8: Detect Third-Party IM/Communication SDKs
+
+Check for non-HTTP communication SDKs that may need separate protocol handling:
+
+**融云 (RongCloud) IM:**
+- `libRongIMLib.so`, `libRongCallLib.so` in lib/
+- Requires TCP connection (not HTTP) for messaging
+- Extract: `rongCloudToken`, `rongCloudId` from login response
+
+**TencentIM:**
+- `libImSDK.so`, `libImSDKCore.so` in lib/
+- Extract: `timSig`, `timUserId` from login response
+
+**环信 (HuanXin) IM:**
+- `libhyphenate*.so` in lib/
+
+### Step 9: Case Matching
 Read `~/.claude/reverse-skills/kb/case_library/index.json`. Search for cases where:
 - `tags.packer` matches detected packer
 - `tags.category` matches (infer from app name, permissions, string scan)
@@ -74,6 +108,16 @@ If match found: output the matched case as a reference strategy.
   "domain_candidates": ["api.example.com", ...],
   "key_candidates": ["possible_key_1", ...],
   "matched_cases": ["mengyin_2026-05"],
-  "assets": {"has_js": true|false, "js_files": ["app.js", ...], "has_h5": true|false}
+  "assets": {"has_js": true|false, "js_files": ["app.js", ...], "has_h5": true|false},
+  "device_fingerprint": {
+    "shumei": {"detected": true|false, "lib": "libsmsdk.so", "header": "smdeviceid"},
+    "netease": {"detected": true|false, "lib": "libne.so", "header": "devicetoken"},
+    "trustdevice": {"detected": true|false, "lib": "libtrustdevice.so"}
+  },
+  "third_party_im": {
+    "rongcloud": {"detected": true|false, "libs": ["libRongIMLib.so"], "protocol": "tcp"},
+    "tencentim": {"detected": true|false, "libs": ["libImSDK.so"], "protocol": "tcp"},
+    "huanxin": {"detected": true|false, "libs": ["libhyphenate.so"], "protocol": "tcp"}
+  }
 }
 ```

@@ -72,3 +72,49 @@
 **Extract:** access_token from token endpoint response
 **Refresh:** POST /oauth/token with grant_type=refresh_token
 **Complexity:** Low. Standard protocol, well-documented. Rare in Chinese live-streaming apps.
+
+## Pattern 6: Device-Bound Session Auth
+
+**Flow:** App/init (device registration) → establish session → derive encryption key → login → get auth token
+
+**Endpoints:** `App/init` or `device/register` → `/login` (or `/UI/PasswordLoginPage/passwordLogin`)
+
+**Detection:**
+- First request after app install is to `/App/init` or `/device/register` or `*/init`
+- Request carries `devicetoken` header (long Base64, format like `v3:AAAAA...`)
+- Request may carry `smdeviceid` (数美 device fingerprint) or other device ID headers
+- Response returns `sessionId`, `token`, or sets `clientsession` cookie/header
+- All subsequent requests include `clientsession` or `token` header from init response
+- AES key derived from devicetoken/clientsession (NOT a static string in code)
+- Login request fails with `120001 密钥获取失败` if session key doesn't match
+
+**Extract:**
+- `devicetoken` from App/init request headers (cold start capture)
+- `clientsession` from App/init response or subsequent request headers
+- `smdeviceid` from request headers (数美 SDK generated)
+- AES key via Frida `Cipher.init` hook (per-session, must re-extract)
+
+**Chain:**
+1. Generate/obtain devicetoken (device fingerprint) → format `v3:AAAAA...` Base64
+2. Generate/obtain smdeviceid (数美 fingerprint) → Base64 encoded
+3. POST App/init with devicetoken, smdeviceid → get clientsession
+4. Derive AES key from devicetoken + clientsession (algorithm TBD per-app)
+5. Encrypt login request with derived key, include clientsession in headers
+6. POST /login with encrypted credentials → get auth token
+7. All subsequent requests: clientsession + auth token + derived key encryption
+
+**Key indicators:**
+- `devicetoken` header format: `v3:AAAAA...` (version prefix + Base64 data, 600+ chars)
+- `smdeviceid` header: Base64-encoded device data from 数美 SDK
+- `clientsession` header: session identifier (UUID or custom format)
+- Error code `120001` = session key mismatch → key derivation wrong or session expired
+
+**Complexity:** Very High. Requires: device fingerprint generation (or extraction from real device), key derivation reversal, session management. Cold start capture ESSENTIAL — cannot skip App/init phase.
+
+**Cases:** 双鱼部落 2026-05 (App/init → devicetoken v3 format → AES key derived per-session → 120001 on mismatch)
+
+**IM SDK Side-Channels:** Login response may also return credentials for non-HTTP protocols:
+- `rongCloudToken` + `rongCloudId` → 融云 IM TCP connection
+- `mqttClientId` + `mqttPassword` → MQTT push channel
+- `timSig` → TencentIM SDK auth
+- These require SEPARATE protocol implementation beyond HTTP plugin scope

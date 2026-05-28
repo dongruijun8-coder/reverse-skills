@@ -214,6 +214,58 @@
     }
   },
 
+  "key_derivation_detection": {
+    "session_bound_key": {
+      "note": "会话绑定密钥 — 双鱼部落模式: key不在静态存储中, 从devicetoken派生",
+      "conditions": [
+        {"check": "key_captured_via_hook", "weight": 25, "description": "Cipher.init/SecretKeySpec hook captured key bytes"},
+        {"check": "key_not_in_static_storage", "weight": 35, "description": "Captured key NOT found in MMKV/SP/DB/JS"},
+        {"check": "devicetoken_header_present", "weight": 20, "description": "Request headers include devicetoken (device fingerprint)"},
+        {"check": "clientsession_header_present", "weight": 10, "description": "Request headers include clientsession (session ID)"},
+        {"check": "key_changes_per_session", "weight": 10, "description": "Different key captured on different app launches"}
+      ],
+      "thresholds": {"confident": 70, "suspicious": 40, "ignore": 0}
+    }
+  },
+
+  "device_fingerprint_detection": {
+    "shumei_fengkong": {
+      "conditions": [
+        {"check": "file_exists_libsmsdk.so", "weight": 70, "description": "数美 SDK native lib present"},
+        {"check": "manifest_has_fengkong_package", "weight": 20, "description": "com.fengkong or com.shumei in manifest"},
+        {"check": "smdeviceid_in_traffic", "weight": 10, "description": "smdeviceid header observed in captured traffic"}
+      ],
+      "thresholds": {"confident": 60, "suspicious": 40, "ignore": 0}
+    },
+    "netease_device_token": {
+      "conditions": [
+        {"check": "file_exists_libne.so_or_libnesec.so", "weight": 60, "description": "网易 device lib present"},
+        {"check": "devicetoken_in_traffic", "weight": 30, "description": "devicetoken header format v3:AAAAA... in traffic"},
+        {"check": "devicetoken_length_gt_500", "weight": 10, "description": "devicetoken is 600+ characters Base64"}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 40, "ignore": 0}
+    }
+  },
+
+  "third_party_sdk_detection": {
+    "rongcloud_im": {
+      "conditions": [
+        {"check": "file_exists_libRongIMLib.so", "weight": 70, "description": "融云 IM native lib present"},
+        {"check": "rongCloudToken_in_login_response", "weight": 20, "description": "Login response includes rongCloudToken field"},
+        {"check": "rongcloud_navi_domain_in_strings", "weight": 10, "description": "rongnav.com domain in APK strings"}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 40, "ignore": 0}
+    },
+    "tencent_im": {
+      "conditions": [
+        {"check": "file_exists_libImSDK.so", "weight": 70, "description": "TencentIM native lib present"},
+        {"check": "timSig_in_login_response", "weight": 20, "description": "Login response includes timSig field"},
+        {"check": "tim_identifier_in_strings", "weight": 10, "description": "Tencent IM app ID in APK strings"}
+      ],
+      "thresholds": {"confident": 65, "suspicious": 40, "ignore": 0}
+    }
+  },
+
   "hook_safety_assessment": {
     "note": "评估特定packer下Frida hook操作的风险等级",
     "NIS_hook_safety": {

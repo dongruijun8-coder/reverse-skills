@@ -53,3 +53,35 @@
 **Detection:** No known packer .so files
 **Strategy:** Full analysis suite — jadx decompile + Frida hook all crypto classes
 **Evidence from cases:** popo_2026-05 (confirmed: clean decompile, no hook needed)
+
+---
+
+## 数美 Device Fingerprint (libsmsdk.so)
+
+**Detection:** `libsmsdk.so` in lib/ directory, `com.fengkong` or `com.shumei` packages in manifest
+**Not a packer** — device fingerprint SDK used for risk assessment. Present alongside packers (NIS + 数美 is common).
+**Impact:** Generates `smdeviceid` header — Base64-encoded device fingerprint sent with every request
+**Strategy:** Hook `com.fengkong.DeviceFingerprint.getDeviceId()` or similar → capture smdeviceid generation
+**Critical for:** Session-bound key apps where smdeviceid participates in key derivation or request validation
+
+## 网易 Device Token (libne.so / libnesec.so)
+
+**Detection:** `libne.so` (standalone) or `libnesec.so` (part of NIS packer)
+**Impact:** Generates `devicetoken` header — format `v3:AAAAAZ5sbFZMGkeL...` (~600+ chars Base64)
+**Strategy:** devicetoken is generated at App/init. May be used as input to AES key derivation.
+**Critical for:** NIS apps where devicetoken → key derivation → session encryption
+
+## 融云 IM SDK (libRong*)
+
+**Detection:** `libRongIMLib.so`, `libRongCallLib.so`, `libRongMediaLib.so` in lib/ directory
+**Not a packer** — third-party IM SDK for chat/messaging
+**Impact:** Private messaging uses RongCloud TCP protocol, NOT HTTP API. Requires separate protocol implementation.
+**Strategy:** Extract `rongCloudToken`, `rongCloudId`, appKey from login response → mark as external protocol
+**Flag:** `send_message` and `send_private_message` endpoints → `protocol: "rongcloud_tcp"`
+
+## TencentIM SDK (libImSDK*)
+
+**Detection:** `libImSDK.so`, `libImSDKCore.so` in lib/ directory
+**Impact:** Real-time messaging via Tencent IM TCP/proprietary protocol
+**Strategy:** Extract `timSig`, `timUserId` from login response → mark as external protocol
+**Flag:** Chat/message endpoints → `protocol: "tencentim"`

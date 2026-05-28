@@ -83,3 +83,45 @@ def decrypt_gcm(encrypted_b64, key, nonce):
 **Strategy:** Decrypt outer layer first → check if inner data is still encrypted → decrypt inner layer
 **Python approach:** Chain decrypt calls, check if result is valid JSON after each layer
 **Cases:** mengyin_2026-05 (pub_enc header triggers body AES-ECB, data field may also be AES-encrypted)
+
+## Pattern 7: Session-Bound Key Derivation
+
+**JS/Native Signature:** Key NOT found as static string in code/MMKV/SP/DB. Key appears at runtime via `SecretKeySpec(keyBytes, "AES")` where `keyBytes` is computed from device/session identifiers.
+
+**Confidence clues:** Cipher.init hook captures key (weight +30), key NOT in static storage (weight +35), devicetoken/clientsession headers present (weight +20), key changes per app restart (weight +15)
+
+**Key characteristics:** Key is 32 bytes (AES-256) or 16 bytes (AES-128). Derived at app startup from one or more of: `devicetoken`, `clientsession`, device hardware IDs, random seed from server. Same device → same key per session. Different device → different key.
+
+**Detection:**
+1. Hook `Cipher.init()` / `SecretKeySpec.<init>()` → capture key bytes
+2. Search MMKV/SP/DB/JS for captured key → NOT FOUND
+3. Check cold start request headers for `devicetoken`, `clientsession`, `smdeviceid`
+4. Key is derived, not stored → must either:
+   a. Reverse the derivation function (hook SecretKeySpec stack trace → find caller)
+   b. Capture key per-session via Frida and use within session window
+
+**Derivation sources (check in order):**
+- `devicetoken` header → device fingerprint, may be hashed/SHA256'd to produce key
+- `clientsession` header → may BE the key (base64-encoded) or derivation seed
+- `smdeviceid` → 数美 device fingerprint, may participate in derivation
+- Native .so function → `NativeLib.getEncKey(token)` or similar JNI call
+
+**Strategy:**
+1. Hook `SecretKeySpec.<init>(byte[], String)` → capture key bytes + stack trace
+2. From stack trace: identify the CALLER method (derivation function)
+3. Hook the derivation function → capture its inputs (devicetoken, etc.)
+4. Replicate derivation in Python (hash, HMAC, or custom byte operations)
+5. IF native derivation: try to call the .so function via Frida, OR accept session-scoped key (re-capture each session)
+
+**Python equivalent (placeholder — depends on derivation algo):**
+```python
+import hashlib, base64
+
+def derive_key(devicetoken: str, clientsession: str = None) -> bytes:
+    # Common: SHA256(devicetoken + salt)
+    # Or: HMAC-SHA256(devicetoken, clientsession)
+    # Or: direct decode of clientsession
+    return hashlib.sha256(devicetoken.encode()).digest()
+```
+
+**Cases:** 双鱼部落 2026-05 (32-byte AES key per-session, derived from devicetoken/clientsession, service returns 120001 on mismatch)

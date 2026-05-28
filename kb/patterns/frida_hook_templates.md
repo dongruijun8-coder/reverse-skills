@@ -14,6 +14,7 @@ Battle-tested patterns from real reverse engineering sessions. Each template inc
 | T6: Gson.toJson | Unstable | Caution | No | Serialization format |
 | T7: OkHttp newCall | Safe | Yes | No | Traffic indicator |
 | T8: SecretKeySpec init | Safe | Yes | No | Key material capture |
+| T9: Key Derivation Trace | Safe | Yes | No | Stack trace + derivation caller |
 
 ## Core Principle: App-Layer First, Not Bottom-Up
 
@@ -330,4 +331,71 @@ Java.perform(function() {
 ### 360加固 — Skip All Hooks
 ```
 → Skip to H5/WebView JS static analysis
+```
+
+---
+
+## T9: Device Registration / App/init Capture
+
+**Target:** `SecretKeySpec.<init>(byte[], String)` with stack trace, OR app-specific device ID generator
+**Captures:** AES key derivation + stack trace to find derivation caller + devicetoken generation
+**Safety:** Safe — system class hook with stack trace logging (no reflection/cast)
+**Pitfalls:** Stack trace logging is verbose. Only enable during cold start capture. Disable after capturing derivation call chain.
+**Strategy:** Critical for session-bound key apps. Hook SecretKeySpec to find WHERE the key comes from, not just what the key is.
+
+```javascript
+// T9: Key Derivation Trace — Capture key + stack trace to find derivation function
+Java.perform(function() {
+    var SecretKeySpec = Java.use("javax.crypto.spec.SecretKeySpec");
+    var Thread = Java.use("java.lang.Thread");
+    var Throwable = Java.use("java.lang.Throwable");
+
+    SecretKeySpec.$init.overload('[B', 'java.lang.String').implementation = function(key, algorithm) {
+        if (algorithm.indexOf("AES") !== -1) {
+            var keyHex = "";
+            for (var i = 0; i < Math.min(key.length, 32); i++) {
+                keyHex += ("0" + (key[i] & 0xFF).toString(16)).slice(-2);
+            }
+
+            // Capture stack trace to find WHO created this key
+            var stack = Thread.currentThread().getStackTrace();
+            var trace = [];
+            for (var i = 2; i < Math.min(stack.length, 10); i++) {
+                trace.push(stack[i].toString());
+            }
+
+            console.log("[T9] AES-" + (key.length * 8) + " key=" + keyHex);
+            console.log("[T9] Stack: " + trace.join(" <- "));
+            send({"hook": "KeyDerivation", "key": keyHex, "bits": key.length * 8, "stack": trace});
+        }
+        return this.$init(key, algorithm);
+    };
+});
+```
+
+**Using T9 results:**
+1. Key hex captured → confirms key length and value
+2. Stack trace reveals the CALLER class/method that computed the key
+3. Hook that caller next → capture derivation inputs (devicetoken, etc.)
+4. Replicate derivation in Python
+
+**T9 + Cold Start Workflow:**
+```
+1. pm clear {package}                        # force cold start
+2. Start T9 hook (output to file)            # capture key derivation
+3. Launch app, wait for App/init complete    # ~90 seconds
+4. Check T9 output → find key + stack trace  # identify derivation caller
+5. Hook derivation caller (from stack trace) # capture inputs
+6. Replicate derivation in Python            # generate key without Frida
+```
+
+### Cold Start Capture (T7+T9 Combo)
+
+```
+1. T7 (newCall) → confirm traffic flows
+2. T9 (SecretKeySpec) → capture key derivation
+3. Wait for App/init → device register → first encrypted request
+4. Collect: devicetoken, clientsession, smdeviceid from T1 headers
+5. Collect: derived key from T9 output
+6. Collect: derivation caller from T9 stack trace
 ```

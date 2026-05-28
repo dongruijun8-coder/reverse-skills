@@ -57,6 +57,12 @@ def xor_decode(p1_b64, p2_b64):
 ```
 **Cases:** 双鱼部落 2026-05 (p1 XOR p2 = plaintext params, custom NetEase decryption)
 
+**Post-Login State Transition (critical for XOR Pair):**
+- Pre-login: p1 = random nonce, p2 = random nonce (p1 XOR p2 = plaintext), p3 = random
+- Post-login: p1 = FIXED (derived from auth token or session), p2 = request signature (computed per-request), p3 = may change role
+- Detection: Compare p1 values across pre-login and post-login requests. If p1 becomes invariant after login → token-derived.
+- Strategy: Hook post-login p1 generation → trace to token → replicate derivation
+
 ## Pattern 6: Native (JS Bridge) Sign
 **JS Signature:** `window.androidJsObj.sign(params)` or bridge call
 **Characteristics:** JS delegates sign to native Java/Kotlin code via WebView bridge

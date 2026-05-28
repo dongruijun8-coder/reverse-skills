@@ -66,6 +66,35 @@ Priority order for finding the encrypt_key:
 4. Hook output: `SecretKeySpec(key, "AES")` → key bytes
 5. Hardcoded in Java (if decompiled): `static final String KEY = "..."`
 
+### Step 3b: Check for Session-Bound Key Derivation
+
+IF key found via hook (step 3.4) but NOT found in static sources (steps 3.1-3.5):
+→ Key is likely SESSION-BOUND (derived, not stored). Read `kb/patterns/crypto_patterns.md` Pattern 7.
+
+1. Hook `SecretKeySpec.<init>(byte[], String)` with Java stack trace (use T9 template)
+2. From stack trace: identify derivation caller class/method
+3. Check cold start headers for derivation inputs:
+   - `devicetoken` → device fingerprint (v3:AAAAA... format)
+   - `clientsession` → session ID
+   - `smdeviceid` → 数美 device fingerprint
+4. Hook the derivation caller → capture inputs → replicate in Python
+5. IF derivation is native (.so): mark `key_derivation: "native"` → either:
+   a. Call .so function via Frida NativeFunction
+   b. Accept session-scoped key (mark plugin as "requires Frida for key")
+
+**Session-bound key output format:**
+```
+{
+  "key_type": "session_derived",
+  "key_length": 32,
+  "derivation_source": "devicetoken + clientsession",
+  "derivation_function": "com.app.crypto.KeyGenerator.generate",
+  "derivation_layer": "native|java",
+  "session_scoped": true,
+  "can_replicate": false
+}
+```
+
 ### Step 4: Verify with crypto_aes
 
 For each candidate key:

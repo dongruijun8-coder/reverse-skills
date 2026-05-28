@@ -73,3 +73,28 @@
 - **Failure:** OkHttp 5.x 大量 API 迁移到 Kotlin, overload 数量/签名完全不同
 - **Alternative:** 先枚举目标类方法签名 → 确认参数类型 → 再针对性 hook
 - **Cases:** 本次工作流 (user-agent: okhttp/5.3.2, RealCall 类名变化, RequestBody.create 15个overloads)
+
+## Assuming Static Encryption Key
+- **Trigger:** 从 Frida Cipher.init hook 捕获 key → 硬编码到 client.py → 后续请求返回 `120001`
+- **Failure:** NIS/加固 app 的 AES key 是会话绑定的（从 devicetoken + clientsession 派生），不是静态字符串
+- **Root cause:** Key 不在 MMKV/SP/DB/JS 中。Cipher.init 捕获的是当次会话的派生 key，重启 app 后 key 变化。
+- **Alternative:** 逆向 key 派生函数（hook SecretKeySpec stack trace → 找 caller → 逆向派生逻辑）或每次会话重新 Frida 捕获
+- **Cases:** 双鱼部落 2026-05 (32-byte key 每会话固定但跨会话不同, 120001 密钥获取失败)
+
+## Skipping Cold Start Capture
+- **Trigger:** 启动 app 时用户已登录 → 直接 UI 遍历 → 缺失 App/init 和设备注册流量
+- **Failure:** 设备注册（App/init）是会话绑定的关键第一步。缺失则无法理解 devicetoken、clientsession、key 派生。
+- **Alternative:** Phase 2 必须包含 Cold Start 子阶段：`pm clear {package}` → 重新启动 → 抓取完整初始化流量
+- **Cases:** 双鱼部落 2026-05 (App/init 返回 session 数据, devicetoken 参与 key 派生)
+
+## Ignoring Third-Party Device Fingerprint SDK
+- **Trigger:** 只检测 packer .so → 忽略 数美/TrustDevice/NetEngine 等设备指纹 SDK
+- **Failure:** `smdeviceid`、`devicetoken` 等设备指纹头缺失 → 服务端拒绝请求
+- **Alternative:** Phase 0 检测 数美/网易/TrustDevice SDK → Phase 3 hook 指纹生成函数 → 提取生成逻辑
+- **Detection:** APK 中包含 `libsmsdk.so`(数美)、`libne.so`(网易)、`libtrustdevice.so` 等
+
+## Blindly Implementing Non-HTTP Protocols
+- **Trigger:** 登录响应包含 `rongCloudToken`、`mqttPassword` → 尝试用 HTTP client 发送 IM 消息
+- **Failure:** 融云/TencentIM/MQTT 使用私有 TCP 协议，不是 HTTP API。HTTP client 无法通信。
+- **Alternative:** 提取 IM 凭据（token、appKey、userId）→ 标记为外部协议 → 使用官方 SDK 或逆向 TCP 协议
+- **Cases:** 双鱼部落 2026-05 (send_message 需融云 TCP，非 HTTP)
