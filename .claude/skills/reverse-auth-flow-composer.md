@@ -243,3 +243,45 @@ class AuthManager:
   }
 }
 ```
+
+## Config Patch Output
+
+In addition to the standard output, emit a `config_patch` for the orchestrator:
+
+```json
+{
+  "config_patch": {
+    "auth": {
+      "plugin": "manual-token" | "password-login" | "sms-login" | "frida-rpc",
+      "params": {}
+    },
+    "requires_device_init": true | false,
+    "messaging_app_key": null | "<rongcloud appKey>",
+    "rpc_targets": {
+      "login_activity": "<LoginActivity完整类名>" | null,
+      "login_viewmodel": "<LoginViewModel完整类名>" | null,
+      "okhttp_intercept_class": "<OkHttp拦截器类名>" | null,
+      "sp_path": "<SharedPreferences文件路径>" | null,
+      "sp_token_key": "<token key名>" | null
+    }
+  }
+}
+```
+
+**auth 填写规则:**
+- manual-token: `{"plugin":"manual-token","params":{"token_field":"<登录响应token字段名>","uid_field":"<登录响应uid字段名>"}}`
+- password-login: `{"plugin":"password-login","params":{"endpoint":"<登录端点路径>","fields":{"phone":"<实际key>","password":"<实际key>",...},"response_mapping":{"token":"<实际key>","uid":"<实际key>"}}}`
+- sms-login: `{"plugin":"sms-login","params":{"endpoint":"<短信端点>","fields":{"phone":"<实际key>","sms_code":"<实际key>"},"response_mapping":{"token":"<实际key>","uid":"<实际key>"}}}`
+- frida-rpc: `{"plugin":"frida-rpc","params":{"rpc_method":"login"}}`
+  - 当 requires_device_init=true 或 packer=heavy 时选择
+
+**fields 规则:**
+- 所有 value 从实际抓包请求 body 中提取字段名，不做硬编码假设
+- code 和 mobile_token 仅在抓包请求中出现时才包含
+
+**rpc_targets 规则 (仅 RPC 路径需要):**
+- login_activity: Phase 4 确认的登录界面 Activity 完整类名
+- login_viewmodel: 从反编译代码中找到的 LoginViewModel/LoginPresenter 类名
+- okhttp_intercept_class: OkHttp Interceptor 实现类（如 XxxInterceptor）
+- sp_path: Phase 1 提取的 SharedPreferences 文件相对路径
+- sp_token_key: SP 中存储 token 的 key 名

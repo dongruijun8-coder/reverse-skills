@@ -64,9 +64,9 @@ reverse crypto_sign_verify '{"sign_code": "...", "params": {...}, "expected": "A
 - 错误时记录完整上下文 (输入/尝试/失败原因)
 
 ### 6. 输出质量
-- 生成的 plugin.py 必须能直接 import 不报错
-- sign.py 必须通过 crypto_sign_verify 验证
-- api_spec.json 必须符合 schema 定义
+- 中转验证代码 (sign.py/crypto.py) 必须通过 crypto_sign_verify 验证
+- 最终 config.json 必须通过 quality-rules.md 全部门禁
+- frida_script.js (RPC路径) 必须包含 pipeline 引用的所有 rpc_method
 
 ### 7. 何时暂停 (L4) — 交互检查点
 
@@ -166,9 +166,50 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
    - IF `reusable.credential_sources` exists → prioritize those files in Phase 1
    - IF `reusable.hook_templates_used` exists → generate those templates first in Phase 3
    - Store all pre-loaded hypotheses in `workflow.json` under `matched_case_hypotheses`
+14. **Path Classification (NEW):** Based on packer detection:
+    - packer == "none" OR packer == "爱加密" (light) → `output_path = "A"` (全协议)
+    - packer ∈ {"网易易盾", "360", "Tencent Legu", "梆梆"} → `output_path = "B_or_C"` (RPC)
+    - Save to workflow.json: `output_path`
+    - Notify: "🔀 初步路径判定: {output_path} (Phase 4 后最终确认)"
+
+15. **Write config_scratch (NEW):** Save initial config fragments:
+    ```json
+    {
+      "meta": {
+        "app_name": "<app_slug from apk-analyzer config_patch>",
+        "version": "<manifest.versionName or '0.0.0'>",
+        "platform": "Android",
+        "config_schema": "2.0"
+      },
+      "server": {
+        "base_url": "<api_domain from apk-analyzer config_patch>",
+        "default_headers": {}
+      },
+      "pipeline": {
+        "encryption": null,
+        "signing": null,
+        "auth": null,
+        "messaging": "<messaging_type from apk-analyzer config_patch>"
+      },
+      "endpoints": {
+        "all_rooms": null,
+        "ranking": null
+      },
+      "runtime_config_hints": {
+        "data_source_values": [],
+        "period_values": [],
+        "gender_values": []
+      },
+      "_path": "<output_path>",
+      "_unsupported": {}
+    }
+    ```
+    Save to `projects/{app_name}/config_scratch.json`.
+    Use `state_save(project_dir, scratch={config_patch: <the above object>})` to persist.
+
 13. Save state, output summary with matched case hypotheses
 
-**Output:** packer type, strategy decisions, domain candidates, key candidates, device fingerprint SDKs detected, third-party IM SDKs detected, session_bound_key_likely flag, matched cases with pre-loaded hypotheses
+**Output:** packer type, strategy decisions, domain candidates, key candidates, device fingerprint SDKs detected, third-party IM SDKs detected, session_bound_key_likely flag, matched cases with pre-loaded hypotheses, **config_scratch.json (meta + server.base_url + pipeline.messaging)**, **output_path (A/B_or_C)**
 
 ### Phase 0.5: Environment Preparation [NEW]
 
@@ -233,6 +274,11 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 9. For each .db file: call `db_explore(db_path, scan_patterns=[URL_REGEX, KEY_REGEX])`
 10. For each share_data.xml or .ser file: call `file_parse_java_serial(file_path)` → extract ticket/uid
 11. Collect all credentials into state.credentials, record sources
+12. **Write config_scratch server.default_headers (NEW):** Scan extracted SP/MMKV for header-like keys:
+    Search (case-insensitive): clienttype, client_type, channel, build, appversion, app_version, devicetype, device_type, device_model, devicemodel
+    For each match → write to config_scratch.server.default_headers (key=actual field name, value=extracted value)
+    Load existing config_scratch from `projects/{app_name}/config_scratch.json`, merge, save.
+    Do NOT overwrite existing non-empty values.
 
 ### Phase 2: Traffic Capture + SSL Bypass
 
@@ -281,6 +327,100 @@ Execute phases 0, 0.5, 1, 2, 3, 4, 5 in order. For each phase:
 14. Call `proxy_stop()` → export .mitm file
 15. Log all strategies attempted + results to strategy_stack
 16. IF all strategies exhausted: L3 path abandonment → continue with H5-only analysis
+
+17. **Fill server.default_headers from traffic (NEW):**
+    From any successful request:
+    - Extract headers: clienttype, channel, build, appversion
+    - Extract devicetype: run adb_device_info → use "ro.product.brand ro.product.model" (e.g. "Samsung SM-S9280")
+    - Merge into config_scratch.server.default_headers (Phase 2 values take priority over Phase 1)
+    - Save config_scratch.
+
+18. **Fill endpoints.all_rooms (NEW):**
+    a. Identify room-list endpoint: scan all captured flows for responses that are JSON arrays where items contain ≥2 of {room_id, roomName, id, name}
+    b. Prioritize candidates: path contains room/list/home > larger array response > has pagination params
+    c. Determine single-step vs multi-step:
+       - Body has fixed catId/id value not from another endpoint → single-step
+       - Body has variable id value that comes from another endpoint's response → multi-step
+    d. Single-step format:
+       ```json
+       {
+         "path": "<extracted>", "method": "GET|POST",
+         "body": {<from capture, pagination fields replaced: offset→{{offset}}, page→{{page}}>},
+         "pagination": {"type": "offset_limit|page_number", "size": <observed size>, "stop_on": "empty_list"},
+         "output_mapping": {<field matching result>}
+       }
+       ```
+       pagination type: body has offset starting from 0 → "offset_limit"; body has page starting from 1 → "page_number"
+    e. Multi-step format:
+       ```json
+       {
+         "steps": [
+           {"name": "categories", "path": "<category endpoint>", "method": "GET|POST", "body": {<from capture>}},
+           {"name": "room_list", "path": "<room list endpoint>", "method": "GET|POST",
+            "body": {<with {{_iter.field}} references>},
+            "iter_source": "categories.<list_field_name>",
+            "pagination": {<same as single-step>}}
+         ],
+         "output_mapping": {<including category: {{_iter.key}} or {{_iter.field}}>}
+       }
+       ```
+       iter_source: trace room_list body variable → source endpoint → response list field name
+    f. output_mapping field matching (first match wins, priority order):
+       id → id, roomId, unRoomId, room_id, user_id
+       name → name, roomName, room_name, title, nick
+       type → type, room_type, roomType, category
+       Required fields (id, name) unmatched → mark "FIXME"
+       API has no corresponding type field → leave "" (no hardcoded "voice")
+    g. Write to config_scratch.endpoints.all_rooms
+
+19. **Fill endpoints.ranking (NEW):**
+    a. Identify ranking endpoint: scan flows for JSON array responses where items contain ≥2 of {uid, userId, nick, nickname}
+    b. Format:
+       ```json
+       {
+         "path": "<extracted>", "method": "GET|POST",
+         "body": {
+           "room_id": "{{room.id}}",
+           "mode": "{{data_source_key}}",
+           "rank_type": "{{period_key}}",
+           <other static fields from capture>
+         },
+         "pagination": {<same as all_rooms>},
+         "output_mapping": {<field matching>}
+       }
+       ```
+    c. room_id location: in body → {{room.id}} in body template; in URL path → record in _url_template note
+    d. output_mapping field matching (first match wins, priority order):
+       uid → uid, userId, user_id, id, memberId
+       nick → nick, nickname, nick_name, name, userName
+       amount → amount, total, score, gold, coin, contribution, charm
+       gender → gender, sex, user_gender
+       Required (uid, nick) unmatched → "FIXME"
+    e. Extract runtime_config_hints:
+       - data_source_values: all observed "mode" values from ranking requests
+       - period_values: all observed "rank_type" values from ranking requests
+       - gender_values: all observed gender field values from ranking responses
+    f. Write to config_scratch.endpoints.ranking + config_scratch.runtime_config_hints
+
+20. **Fill messaging params (NEW):**
+    IF pipeline.messaging == "rest-json":
+      - Search captured flows for im/msg/send → set send_path
+      - Search captured flows for im/msg/preCheck → set precheck_path
+      - Neither found → both null
+    Update config_scratch.pipeline.messaging with:
+      {"plugin":"rest-json","params":{"precheck_path":null|"<path>","send_path":null|"<path>"}}
+    IF pipeline.messaging == "rongcloud-tcp":
+      - Leave app_key as null (Phase 0 may have found it, Phase 4 will confirm)
+      - Update to: {"plugin":"rongcloud-tcp","params":{"app_key":null|"<extracted>"}}
+
+    IF zero traffic captured:
+      - endpoints: fill FIXME placeholders (path="FIXME", method="POST", body={}, pagination defaults with size=20, output_mapping with FIXME values)
+      - runtime_config_hints: empty arrays
+      - messaging params: null paths
+      - Mark workflow.json: "traffic_empty": true
+      - Continue to Phase 3 (do NOT abort)
+    
+    Save config_scratch.
 
 ### Phase 3: Algorithm Reverse Engineering
 
@@ -358,6 +498,37 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 - IF 3 consecutive crashes: pause, review anti_patterns.md, reconsider strategy
 - Track hook versions: name scripts v1, v2, v3... with documented changes
 
+11. **Write pipeline.encryption + pipeline.signing to config_scratch (NEW):**
+    a. encryption:
+       - No encryption detected → `"plaintext"`
+       - AES-CBC detected:
+         IF key found in static storage (MMKV/SP/JS):
+           → `{"plugin":"aes-cbc","params":{"key":"<hex>","iv":"<hex>","key_derivation":null}}`
+         ELIF key captured via Cipher.init hook only:
+           → `{"plugin":"aes-cbc","params":{"key":null,"iv":null,"key_derivation":"<device_token|session_key|native>"}}`
+           key_derivation value:
+           - devicetoken present in cold start headers → "device_token"
+           - clientsession contains key material → "session_key"
+           - derivation in native .so → "native"
+         ELSE key not found:
+           → `"plaintext"` + add to _unsupported: `{"encryption":{"detected":"<algorithm>","reason":"key not found","requires_plugin_py":true}}`
+       - Other algorithm (ECB/GCM/RC4/RSA):
+         → `"plaintext"` + add to _unsupported: `{"encryption":{"detected":"<algorithm>","reason":"config schema 2.0 仅支持 aes-cbc","requires_plugin_py":true}}`
+
+    b. signing:
+       - No signing → `"plaintext"`
+       - XOR triple sign detected:
+         → `{"plugin":"xor-triple-sign","params":{"read_key":"<hex|FIXME>","write_key":"<hex|FIXME>","p3_key":"<hex|FIXME>"}}`
+       - Other algorithm:
+         → `"plaintext"` + add to _unsupported: `{"signing":{"detected":"<algorithm>","reason":"config schema 2.0 仅支持 xor-triple-sign","requires_plugin_py":true}}`
+
+    c. After writing, update _path if needed:
+       - _path == "B_or_C" AND encryption key found in static storage AND signing keys complete → _path = "B" (Auth-only RPC)
+       - _path == "B_or_C" AND (encryption key NOT found OR signing keys NOT found) → _path = "C" (Full RPC)
+       - _path == "A" → keep as "A" (全协议)
+
+    Save config_scratch.
+
 ### Phase 4: Auth Chain + Verification
 
 **Goal:** Orchestrate authentication flow and verify everything works. For session-bound apps, first establish device session (App/init), then authenticate.
@@ -379,62 +550,264 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 9. IF 120001 → session key mismatch → re-derive key or re-extract from new session
 10. Log auth result
 
-### Phase 5: Generate Artifacts + Smoke Test
+11. **Write pipeline.auth to config_scratch (NEW):**
+    a. Select auth plugin:
+       - Login requires SMS code → sms-login
+       - Login requires password + token long-lived (>24h) → manual-token
+       - Login requires password + token short-lived → password-login
+       - output_path is "B" or "C" → frida-rpc
 
-**Goal:** Generate all output files and validate them
+    b. Fill params:
+       manual-token:
+         ```json
+         {"plugin":"manual-token","params":{"token_field":"<from login response>","uid_field":"<from login response>"}}
+         ```
+       password-login:
+         ```json
+         {"plugin":"password-login","params":{"endpoint":"<login endpoint>","fields":{"phone":"<actual key>","password":"<actual key>","code":"<actual key if present>","mobile_token":"<actual key if present>"},"response_mapping":{"token":"<actual key>","uid":"<actual key>"}}}
+         ```
+       sms-login:
+         ```json
+         {"plugin":"sms-login","params":{"endpoint":"<sms endpoint>","fields":{"phone":"<actual key>","sms_code":"<actual key>"},"response_mapping":{"token":"<actual key>","uid":"<actual key>"}}}
+         ```
+       frida-rpc:
+         ```json
+         {"plugin":"frida-rpc","params":{"rpc_method":"login"}}
+         ```
+
+    c. ALL field name values in "fields" and "response_mapping" MUST be extracted from actual captured request/response bodies.
+       DO NOT hardcode assumptions like phone→"phone", password→"password".
+
+    d. For RPC paths (B/C), additionally record rpc_targets in config_scratch:
+       ```json
+       "_rpc_targets": {
+         "login_activity": "<confirmed LoginActivity class>" | null,
+         "login_viewmodel": "<LoginViewModel/LoginPresenter class>" | null,
+         "okhttp_intercept_class": "<OkHttp Interceptor impl class>" | null,
+         "sp_path": "<SharedPreferences file relative path>" | null,
+         "sp_token_key": "<token key name in SP>" | null
+       }
+       ```
+
+    e. Update messaging app_key:
+       IF pipeline.messaging == "rongcloud-tcp" AND app_key == null:
+         → Extract from login response (rongCloudToken source, appKey field)
+       → Update config_scratch.pipeline.messaging.params.app_key
+
+    f. Final path confirmation:
+       - _path == "A" → confirmed Path A (全协议)
+       - _path == "B" → confirmed Path B (Auth-only RPC)
+       - _path == "C" → confirmed Path C (Full RPC)
+       - 360加固 AND hooks_disabled AND H5 fallback failed → ABORT (Impossible)
+
+    Save config_scratch.
+
+### Phase 5: Generate Config Output
+
+Execution depends on `config_scratch._path` confirmed in Phase 4.
+
+#### Phase 5A: 全协议路径 (Path A)
+
+**Goal:** Assemble config.json from config_scratch, validate, output.
 
 **Steps:**
-1. IF sign/crypto detected: generate plugin.py (Plugin mode) using Jinja2 template
-2. IF no sign/crypto: generate api_spec.json only (Spec mode)
-3. Call `toolkit_scaffold(spec_path, output_dir)` → generate plugin.py + models.py
-4. Run smoke tests via the automated runner:
+1. Load config_scratch.json from `projects/{app_name}/config_scratch.json`
+2. Check required fields:
+   - meta: all 4 fields non-empty
+   - server.base_url: non-empty, starts with "https://"
+   - server.default_headers: >=2 fields, includes clienttype + appversion
+   - pipeline: all 4 processors non-null
+   - endpoints.all_rooms: non-null (if FIXME -> warning, continue)
+   - endpoints.ranking: non-null (if FIXME -> warning, continue)
+   Missing required fields -> backfill from source Phase or use placeholders:
+     - meta fields -> "unknown"
+     - server.base_url -> "https://api.example.com" + FIXME warning
+     - endpoints -> FIXME placeholder (path="FIXME", method="POST", body={}, pagination defaults, output_mapping with FIXME)
+
+3. Generate runtime_config from hints:
+   ```json
+   {
+     "settings": {"send_interval": 3},
+     "data_sources": {<observed values as both key and value>},
+     "periods": {<observed values as both key and value>},
+     "genders": {"全部": null, <observed values: inferred label>},
+     "templates": ["{nick} 你好~"]
+   }
    ```
-   python smoke_test.py projects/{app_name}/
+   - data_sources/periods: key=API raw value, value=API raw value (user renames key to Chinese in Dashboard)
+   - genders: all observed values from ranking responses; numeric -> infer label (1->"男",2->"女",0->"未知"); string -> key=value; no observations -> {}
+   - user MUST be able to edit these in Dashboard
+
+4. Assemble final config.json:
+   ```json
+   {
+     "meta": "<scratch.meta>",
+     "server": "<scratch.server>",
+     "pipeline": "<scratch.pipeline>",
+     "endpoints": "<scratch.endpoints>",
+     "runtime_config": "<generated above>"
+   }
    ```
-   This validates all 5 quality gates:
-   a. Importability — `plugin.py` imports without error
-   b. Sign — `compute_sign()` is callable and has docstring
-   c. Crypto — `decrypt_body()` / `encrypt_body()` are defined
-   d. Auth — `authenticate(credentials)` returns truthy (needs credentials.json)
-   e. Fetch — data endpoint returns > 0 items (needs valid auth)
-   
-   Tip: `python smoke_test.py projects/{app}/ --quick` to skip network tests.
-5. IF any smoke test fails → feedback loop to corresponding phase
-6. Generate audit.jsonl summary
-7. **Auto-generate case library entry** (from workflow.json + state):
-   - Create `kb/case_library/{app}_{date}/` directory
-   - Write `workflow.json` (copy from projects/{app}/workflow.json)
-   - Write `report.md` (Phase summaries + key findings + stats)
-   - Update `kb/case_library/index.json`:
-     ```json
-     {
-       "id": "{app}_{date}",
-       "app": "{app_name}",
-       "package": "{package}",
-       "date": "{date}",
-       "duration_hours": {elapsed},
-       "result": "success|partial|failed",
-       "tags": {
-         "category": "{inferred}",
-         "packer": "{packer_type}",
-         "sign": "{sign_type|none}",
-         "crypto": ["{crypto_types}"],
-         "auth": "{auth_type}",
-         "ssl_bypass": "{ssl_method}"
-       },
-       "similarity_keys": [extracted from packer .so names, sign keywords, crypto keywords],
-       "stats": {
-         "endpoints_found": {count},
-         "frida_attempts": {count},
-         "frida_success": {bool},
-         "h5_fallback_used": {bool},
-         "sign_verified": {bool},
-         "total_api_calls_made": {count}
-       }
+   Do NOT include _unsupported, _path, _rpc_targets, runtime_config_hints in output.
+
+5. Validate (L1 offline):
+   a. JSON parseable
+   b. 5 top-level fields present
+   c. meta.config_schema == "2.0", meta.platform == "Android"
+   d. server.base_url starts with "https://"
+   e. pipeline 4 processors all non-null
+   f. endpoints 2 entries non-null
+   g. all_rooms output_mapping covers id + name
+   h. ranking output_mapping covers uid + nick
+   i. Template variable closure: scan all body {{...}} refs -> verify definitions exist in:
+      - output_mapping fields (room.id, room.name)
+      - runtime_config keys (data_source_key, period_key)
+      - pagination built-ins (offset, page, _iter.field, _iter.key)
+      - Undefined ref -> WARNING, do not block output
+
+6. Write `projects/{app_slug}/{app_slug}-config.json`
+
+7. Run smoke test (L1 offline):
+   - Structure valid per quality-rules.md 全协议 rules
+   - Template vars closed
+   - output_mapping field coverage
+
+8. Output summary:
+   - config.json path
+   - Pipeline: encryption=<type>, signing=<type>, auth=<type>, messaging=<type>
+   - Endpoints: all_rooms=<single/multi-step>, ranking=<path>
+   - _unsupported warnings (if any):
+     "⚠️  {processor} 算法 {detected} 不被 config schema 2.0 支持，需手动 plugin.py"
+   - "📋 上传 config.json 到 Dashboard 即可使用"
+
+#### Phase 5B: RPC 路径 (Path B: Auth-only / Path C: Full RPC)
+
+**Goal:** Assemble config.json with frida section + generate frida_script.js
+
+**Steps:**
+1. Load config_scratch.json
+2. Determine RPC sub-mode:
+   - _path == "B" -> Auth-only: encryption/signing = native processors (from Phase 3)
+   - _path == "C" -> Full RPC: encryption/signing = "plaintext"
+
+3. Assemble config.json:
+
+   Path B (Auth-only):
+   ```json
+   {
+     "meta": "<scratch.meta>",
+     "frida": {"enabled": true, "device": "usb", "package": "<manifest.package>", "script": "frida_script.js"},
+     "server": "<scratch.server>",
+     "pipeline": {
+       "encryption": "<scratch.pipeline.encryption>",
+       "signing": "<scratch.pipeline.signing>",
+       "auth": {"plugin": "frida-rpc", "params": {"rpc_method": "login"}},
+       "messaging": "<scratch.pipeline.messaging>"
+     },
+     "endpoints": "<scratch.endpoints>",
+     "runtime_config": "<generated from hints, same as 5A>"
+   }
+   ```
+
+   Path C (Full RPC):
+   ```json
+   {
+     "pipeline": {
+       "encryption": "plaintext",
+       "signing": "plaintext",
+       "auth": {"plugin": "frida-rpc", "params": {"rpc_method": "login"}},
+       "messaging": {"plugin": "frida-rpc", "params": {"rpc_method": "sendMessage"}}
      }
+   }
+   ```
+
+4. Fill frida section:
+   - package: from manifest (apk_extract_manifest in Phase 0)
+   - device: "usb" (default) or "local" (if emulator)
+   - script: "frida_script.js"
+
+5. Generate frida_script.js:
+   From `kb/patterns/frida_hook_templates.md` templates:
+   - Select template versions that were verified successful in Phase 3/4
+   - Use NIS-safe variants (T1-T5) for NIS apps
+
+   ```javascript
+   // frida_script.js — {app_name} RPC Bridge
+   // Generated by reverse-orchestrator Phase 5B
+   // App: {app_name}, Package: {package}
+   // Mode: {Auth-only | Full RPC}
+
+   rpc.exports = {
+       ping: function() { return "pong"; },
+
+       login: function(credentials) {
+           var result = {};
+           Java.perform(function() {
+               // Strategy: {selected from Phase 4 rpc_targets}
+               // Source: T3 v{version} — {description}
+
+               // [INJECT: Phase 4 confirmed login logic]
+               // Endpoint: {login_endpoint}
+               // Fields: {fields_mapping}
+               // Extract from response: {token_field} -> token, {uid_field} -> uid
+
+               result = {
+                   token: "...",
+                   uid: "..."
+                   // Auth-only mode: include encryption_key/iv from Phase 3 Cipher.init hook
+               };
+           });
+           return result;
+       }
+
+       // Full RPC mode only:
+       // sendMessage: function(uid, text) {
+       //     var result = {};
+       //     Java.perform(function() {
+       //         // Strategy: {RongCloud SDK hook | OkHttp intercept}
+       //         // Source: T{template} v{version}
+       //         result = {success: true};
+       //     });
+       //     return result;
+       // }
+   };
+   ```
+
+6. Script injection rules:
+   - login(): inject actual Phase 4 confirmed login endpoint, field names, response mapping
+   - login() Auth-only extras (Path B): inject Phase 3 Cipher.init hook captured key/iv as constants
+   - sendMessage() (Path C only): inject Phase 2 messaging endpoint or RongCloud SDK hook point
+   - NIS apps: NO reflection/Java.cast/Object.keys/enumeration — use hluda-safe patterns only
+   - Each Java.perform block: wrap in try-catch with console.log error
+   - Comment every injection point with template source: "// T3 v15 — createCall NIS-safe"
+
+7. Write output:
+   - `projects/{app_slug}/{app_slug}-config.json`
+   - `projects/{app_slug}/frida_script.js`
+
+8. Validate (L1 offline):
+   - config.json: all quality-rules.md RPC rules pass
+   - frida_script.js: contains `rpc.exports` block
+   - frida_script.js: `ping()` function exists and returns "pong"
+   - frida_script.js: `login()` function exists with `Java.perform` block
+   - Auth-only (Path B): `login()` returns object with encryption_key + encryption_iv; NO sendMessage
+   - Full RPC (Path C): `sendMessage()` function exists; login() does NOT include encryption_key
+   - Method closure: pipeline frida-rpc plugin's rpc_method exists in script rpc.exports
+
+9. Output summary:
+   - config.json path + frida_script.js path
+   - RPC mode: Auth-only | Full RPC
+   - Pipeline: which processors are frida-rpc vs native
+   - Deployment instructions:
      ```
-8. Clean up temp files, output final summary with artifact paths
-9. List any `kb/_proposals/` written this session → suggest user review and merge
+     📋 部署步骤:
+       1. 将 config.json + frida_script.js 上传到 Dashboard
+       2. 确保设备已连接 + {hluda-server|frida-server} 运行中
+       3. Dashboard 自动通过 FridaBridge 加载脚本
+       4. {如果是 Auth-only: Frida login 后 encryption_key 自动注入 HTTP pipeline}
+       5. 设备需保持常亮 + USB 连接
+     ```
+   - _unsupported warnings (if any)
 
 ## Progress Reporting
 
@@ -442,7 +815,7 @@ IF packer == "none" OR packer in ["爱加密", "Tencent Legu"]:
 - Strategy degradation: one-line notification
 - Key discovery: one-line notification with confidence
 - Pause (L4): structured pause report
-- Complete: full summary
+- Complete: full summary with config.json path (+ frida_script.js path for RPC)
 
 ## Audit Logging
 

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Interceptor Framework App Config",
+  "description": "配置驱动截流框架 App 配置文件 JSON Schema",
+  "type": "object",
+  "required": ["meta", "server", "pipeline", "endpoints", "runtime_config"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["app_name", "version", "platform", "config_schema"],
+      "properties": {
+        "app_name": {"type": "string", "minLength": 1},
+        "version": {"type": "string"},
+        "platform": {"type": "string", "const": "Android"},
+        "config_schema": {"type": "string", "const": "2.0"}
+      }
+    },
+    "frida": {
+      "type": "object",
+      "required": ["enabled", "device", "package", "script"],
+      "properties": {
+        "enabled": {"type": "boolean", "const": true},
+        "device": {"type": "string", "enum": ["usb", "local"]},
+        "package": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_.]+"},
+        "script": {"type": "string", "pattern": "\\.js$"}
+      }
+    },
+    "server": {
+      "type": "object",
+      "required": ["base_url", "default_headers"],
+      "properties": {
+        "base_url": {"type": "string", "pattern": "^https://"},
+        "default_headers": {
+          "type": "object",
+          "required": ["clienttype", "appversion"],
+          "minProperties": 2
+        }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["encryption", "signing", "auth", "messaging"],
+      "properties": {
+        "encryption": {
+          "oneOf": [
+            {"type": "string", "enum": ["plaintext"]},
+            {"type": "object", "required": ["plugin", "params"], "properties": {"plugin": {"type": "string"}, "params": {"type": "object"}}}
+          ]
+        },
+        "signing": {
+          "oneOf": [
+            {"type": "string", "enum": ["plaintext"]},
+            {"type": "object", "required": ["plugin", "params"], "properties": {"plugin": {"type": "string"}, "params": {"type": "object"}}}
+          ]
+        },
+        "auth": {
+          "type": "object", "required": ["plugin"],
+          "properties": {"plugin": {"type": "string"}, "params": {"type": "object"}}
+        },
+        "messaging": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "object", "required": ["plugin"], "properties": {"plugin": {"type": "string"}, "params": {"type": "object"}}}
+          ]
+        }
+      }
+    },
+    "endpoints": {
+      "type": "object",
+      "required": ["all_rooms", "ranking"],
+      "properties": {
+        "all_rooms": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["path", "method", "body", "pagination", "output_mapping"],
+              "properties": {
+                "path": {"type": "string"},
+                "method": {"type": "string", "enum": ["GET", "POST"]},
+                "body": {"type": "object"},
+                "pagination": {"type": "object", "required": ["type", "size", "stop_on"]},
+                "output_mapping": {"type": "object", "required": ["id", "name"]}
+              }
+            },
+            {
+              "type": "object",
+              "required": ["steps", "output_mapping"],
+              "properties": {
+                "steps": {
+                  "type": "array", "minItems": 2,
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "path", "method", "body"]
+                  }
+                },
+                "output_mapping": {"type": "object", "required": ["id", "name"]}
+              }
+            }
+          ]
+        },
+        "ranking": {
+          "type": "object",
+          "required": ["path", "method", "body", "pagination", "output_mapping"],
+          "properties": {
+            "path": {"type": "string"},
+            "method": {"type": "string", "enum": ["GET", "POST"]},
+            "body": {"type": "object"},
+            "pagination": {"type": "object", "required": ["type", "size", "stop_on"]},
+            "output_mapping": {"type": "object", "required": ["uid", "nick"]}
+          }
+        }
+      }
+    },
+    "runtime_config": {
+      "type": "object",
+      "required": ["settings", "data_sources", "periods", "genders", "templates"],
+      "properties": {
+        "settings": {"type": "object"},
+        "data_sources": {"type": "object"},
+        "periods": {"type": "object"},
+        "genders": {"type": "object"},
+        "templates": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

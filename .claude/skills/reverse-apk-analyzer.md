@@ -121,3 +121,38 @@ If match found: output the matched case as a reference strategy.
   }
 }
 ```
+
+## Config Patch Output
+
+In addition to the standard output, emit a `config_patch` for the orchestrator to merge into `config_scratch.json`:
+
+```json
+{
+  "config_patch": {
+    "app_slug": "<android:label→pinyin slug, 去除非[a-z0-9_-]字符>",
+    "api_domain": "<首选API域名，优先含'api'，排除CDN>",
+    "messaging_type": "rest-json" | "rongcloud-tcp",
+    "messaging_app_key": null | "<RongCloud init中提取的appKey>",
+    "path_classification": "light" | "heavy"
+  }
+}
+```
+
+**app_slug 规则:**
+- 优先用 manifest `android:label` → 中文转拼音首字母 (梦音→mengyin) / 英文→小写
+- label 为空或无意义 (如"App"/"Main") → 用 package 倒数第二段 → 再 fallback 最后一段
+- 去除非 `[a-z0-9_-]` 字符
+
+**api_domain 规则:**
+- domain_candidates 中优先含 "api" 的域名
+- 排除 CDN 域名 (含 cdn/img/static/upload)
+- 多个候选 → 选被请求次数最多的
+
+**messaging_type 规则:**
+- 检测到 libRongIMLib.so → `"rongcloud-tcp"`
+- 检测到 libImSDK.so → `"rest-json"` (TencentIM 不可直接 TCP)
+- 均未检测 → `"rest-json"`
+
+**path_classification 规则:**
+- packer ∈ {none, 爱加密(轻量)} → `"light"` → 全协议路径
+- packer ∈ {网易易盾, 360, Tencent Legu, 梆梆} → `"heavy"` → RPC 路径

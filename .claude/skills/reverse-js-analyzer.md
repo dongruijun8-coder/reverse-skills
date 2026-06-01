@@ -117,3 +117,31 @@ Call `crypto_sign_verify(sign_code, captured_params, expected_sign)` to validate
   "verification_count": 3
 }
 ```
+
+## Config Patch Output
+
+In addition to the standard output, emit a `config_patch` for the orchestrator:
+
+```json
+{
+  "config_patch": {
+    "signing": "plaintext" | {"plugin":"xor-triple-sign","params":{"read_key":"hex或FIXME","write_key":"hex或FIXME","p3_key":"hex或FIXME"}},
+    "keys_complete": true | false,
+    "unsupported": null | {"detected":"MD5+key","reason":"config schema 2.0 仅支持 xor-triple-sign","requires_plugin_py":true}
+  }
+}
+```
+
+**signing 填写规则:**
+- 无签名 → `"plaintext"`
+- XOR triple sign + 3 个 key 全部从 so/请求头提取 → `{"plugin":"xor-triple-sign","params":{"read_key":"<hex>","write_key":"<hex>","p3_key":"<hex>"}}`
+- XOR + 部分 key 提取 → 已知填入 hex，未知填 `"FIXME"`，keys_complete=false
+- XOR + key 全部未找到 → `"plaintext"` + unsupported 记录
+- 其他签名算法 (MD5+key/HMAC-SHA256/自定义排序/多层/原生) → `"plaintext"` + unsupported 记录
+
+**keys_complete 规则:**
+- 全部 3 个 key 已提取 → true
+- 任何 key 为 "FIXME" → false → 可能需要路径 B
+
+**unsupported.detected 取值:** MD5+key, HMAC-SHA256, custom-sort-hash, multi-layer-sign, native-sign, XOR-no-keys
+```

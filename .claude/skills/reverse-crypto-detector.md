@@ -158,3 +158,31 @@ def encrypt_body(data: dict, key: str = ENCRYPT_KEY) -> str:
   "double_layer_note": "pub_enc header triggers outer; inner data field may also be encrypted"
 }
 ```
+
+## Config Patch Output
+
+In addition to the standard output, emit a `config_patch` for the orchestrator:
+
+```json
+{
+  "config_patch": {
+    "encryption": "plaintext" | {"plugin":"aes-cbc","params":{"key":"hex或null","iv":"hex或null","key_derivation":null|"device_token"|"session_key"|"native"}},
+    "key_static": true | false,
+    "key_source_detail": "<key来源描述>",
+    "unsupported": null | {"detected":"AES-128-ECB","reason":"config schema 2.0 仅支持 aes-cbc","requires_plugin_py":true}
+  }
+}
+```
+
+**encryption 填写规则:**
+- 无加密 → `"plaintext"`
+- AES-CBC + key 在 MMKV/SP/JS 中找到 → `{"plugin":"aes-cbc","params":{"key":"<hex>","iv":"<hex>","key_derivation":null}}`
+- AES-CBC + key 仅从 hook 捕获，不在静态存储 → `{"plugin":"aes-cbc","params":{"key":null,"iv":null,"key_derivation":"device_token|session_key|native"}}`
+- 其他算法 (ECB/GCM/RC4/RSA) → `"plaintext"` + unsupported 记录
+- key 完全未找到 → `"plaintext"` + unsupported 记录
+
+**key_static 规则:**
+- key 在 MMKV/SP/DB/JS 中找到 → true → 路径 A 可行
+- key 仅从 hook 捕获 → false → 需要路径 B (auth RPC 注入 key)
+
+**unsupported.detected 取值:** AES-128-ECB, AES-256-GCM, RC4, RSA, AES-256-CBC(no-key), unknown
