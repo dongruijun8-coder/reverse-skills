@@ -1,6 +1,6 @@
 # Reverse Skills
 
-> Claude Code 逆向工程 Skill 套件 — 输入 APK，输出可执行插件
+> Claude Code 逆向工程 Skill 套件 — 输入 APK，输出截流框架可用的 `<app>-config.json`（或 + `frida_script.js`）
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -8,7 +8,11 @@
 
 移动 App API 逆向常规流程：抓包→绕过 SSL pinning→破解签名算法→破解加密→打通认证→写插件。每个环节都靠人工摸索，加固 App 还要应对检测/崩溃/反调试。一个 App 耗时数小时到数天。
 
-Reverse Skills 把这套流程做成 Claude Code 的 Skill，输入 APK 路径，Claude 自动执行 7 个 Phase，过程中查知识库、匹案例、写 Frida hook、生成插件代码。加固/反检测/签名/加密都有预置策略，失败自动降级。产出 `plugin.py` + `api_spec.json`，可直接接入 Engine 使用。
+Reverse Skills 把这套流程做成 Claude Code 的 Skill，输入 APK 路径，Claude 自动执行 7 个 Phase。根据 App 复杂度自动选择输出路径：
+
+- **全协议**（轻量 App）→ 产出 `config.json`，上传 Dashboard 即用
+- **Auth-only RPC**（加固 App，key 已提取）→ 产出 `config.json` + `frida_script.js`，Frida 实时登录注入密钥
+- **Full RPC**（加固 App，key 无法提取）→ 产出 `config.json` + `frida_script.js`，Frida 桥接实时调用
 
 ## 一条命令安装
 
@@ -38,15 +42,18 @@ Claude Code 中:
 用户: /reverse-orchestrator /path/to/app.apk
 
 Claude 自动执行:
-  Phase 0:   静态分析 → 加固检测 → 策略分流 → 案例匹配
+  Phase 0:   静态分析 → 加固检测 → 路径判定 (全协议/RPC/放弃) → 案例匹配
   Phase 0.5: 环境准备 → 启动 hluda/frida → 装证书 → Magisk 绕过
   Phase 1:   装 App → 拉数据库 → 提取凭据
   Phase 2:   抓包 → SSL 绕过 → UI 遍历 → Hook 采集
   Phase 3:   算法逆向 → 签名破解 → 加密破解 → 密钥提取
-  Phase 4:   认证打通 → 多步链验证 → Token/IM/MQTT
-  Phase 5:   生成 plugin.py + api_spec.json → 冒烟测试 → 案例回写
+  Phase 4:   认证打通 → 多步链验证 → Token/IM/MQTT → 路径确认
+  Phase 5:   产出 config.json (+ frida_script.js for RPC) → 校验 → 案例回写
 
-输出: projects/<app>/plugin.py + api_spec.json + sign.py + crypto.py
+输出:
+  全协议:    projects/<app>/<app>-config.json
+  Auth-only RPC: projects/<app>/<app>-config.json + frida_script.js
+  Full RPC: projects/<app>/<app>-config.json + frida_script.js
 ```
 
 **断点恢复：** 会话中断后，下次打开 Claude Code 输入 `resume <app名>` 即可从上次中断的 Phase 继续，不丢进度。
@@ -82,20 +89,25 @@ Token 链、Sign Token 链、Ticket 会话、多通道认证（HTTP+IM+MQTT+WebS
 
 ```
 Skills（决策层）
-  reverse-orchestrator        # 主控 — 7 Phase 调度/策略决策
-  reverse-apk-analyzer        # Phase 0 — APK 静态分析
-  reverse-js-analyzer         # Phase 3 — JS 签名提取
-  reverse-crypto-detector     # Phase 3 — 加密识别
-  reverse-auth-flow-composer  # Phase 4 — 认证链编排
+  reverse-orchestrator        # 主控 — 7 Phase 调度/三路径决策
+  reverse-apk-analyzer        # Phase 0 — APK 静态分析 + 路径分类
+  reverse-js-analyzer         # Phase 3 — JS 签名提取 + config_patch
+  reverse-crypto-detector     # Phase 3 — 加密识别 + config_patch
+  reverse-auth-flow-composer  # Phase 4 — 认证链编排 + RPC targets
        │
 MCP 工具层（执行层）— 41 tools
   adb(8)  apk(5)  crypto(5)  data(3)  hook(3)
   pipeline(3)  proxy(4)  state(8)  toolkit(2)
        │
 知识层
-  kb/patterns/      12 模式库 + 8 Frida 模板 + 退出条件
+  kb/patterns/      12 模式库 + 9 Frida 模板 + 退出条件
   kb/case_library/   自动累积案例（含可复用策略）
   kb/_proposals/     自进化提案（Agent 发现新模式自动写入）
+       │
+输出 — 三路径
+  全协议        → <app>-config.json → Dashboard 直接使用
+  Auth-only RPC → <app>-config.json + frida_script.js → FridaBridge 注入密钥
+  Full RPC      → <app>-config.json + frida_script.js → FridaBridge 全桥接
 ```
 
 ### Skill vs MCP 工具
@@ -108,13 +120,14 @@ MCP 工具层（执行层）— 41 tools
 
 ## 功能亮点
 
+- **三路径自适应** — 无加固→全协议 config.json；加固+key已提取→Auth-only RPC；加固+key未提取→Full RPC
 - **Phase 0.5 环境准备** — 根据加固类型自动选择 hluda/frida-server/Gadget，配 Magisk DenyList
 - **Frida 安全指南** — Safe/Dangerous/Unstable 三级操作分类，NIS App 8 条反模式规则
-- **Hook 模板库** — T1-T8 共 8 个实战验证模板，一键生成，含 packer 兼容性标注
+- **Hook 模板库** — T1-T9 共 9 个实战验证模板，一键生成，含 packer 兼容性标注（T9 密钥派生追踪）
 - **案例复用** — Phase 0 匹配历史案例后自动预加载 sign/crypto/auth/hook 假设
 - **分析管线** — JS 自动扫描（sign/key/endpoint 提取）、流量加密信号检测、案例自动匹配
 - **断点恢复** — 每个 Phase 前后自动存档，会话中断可恢复，失败自动追踪重试次数
-- **冒烟测试** — Phase 5 自动跑 5 项质量门禁，`--quick` 跳过网络测试
+- **RPC 脚本生成** — Phase 5B 从 Hook 模板库自动拼装 frida_script.js，login/sendMessage 双导出
 - **自进化** — Agent 发现新模式自动写提案到 `kb/_proposals/`，人工 review 后合并
 - **平台兼容** — Windows MSYS2 路径自动处理，adb 命令自动加 `MSYS_NO_PATHCONV=1`
 
@@ -138,9 +151,10 @@ reverse-skills/
 │   ├── skills/                 5 个 Skill 定义（Claude Code 自动发现）
 │   └── rules/                  5 个规则文件（auto-loaded）
 ├── kb/
-│   ├── patterns/               12 模式库 + 8 Frida 模板 + 退出条件
+│   ├── patterns/               12 模式库 + 9 Frida 模板 + 退出条件
 │   ├── case_library/           案例索引 + 可复用策略
 │   ├── confidence_rules.json   置信度评分规则（10+ 种模式）
+│   ├── config_schema.json      截流框架 App Config JSON Schema
 │   └── _proposals/             自进化提案
 ├── mcp_tools/                  41 个 MCP 工具（8 类）+ Server
 ├── bin/reverse                 CLI 入口（28→41 tools）
